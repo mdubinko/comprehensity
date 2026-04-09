@@ -1,0 +1,20 @@
+{
+  "format": "phase0",
+  "version": "0.1",
+  "extensions": {
+    ".json": 3,
+    ".ts": 3,
+    ".tsx": 1
+  },
+  "languages": {
+    "typescript": 4
+  },
+  "primary_languages": ["typescript"],
+  "build_configs": [
+    {"path": "package.json",                       "kind": "npm", "depth": 0},
+    {"path": "packages/api/package.json",          "kind": "npm", "depth": 2},
+    {"path": "packages/client/package.json",       "kind": "npm", "depth": 2}
+  ],
+  "monorepo": true,
+  "generated_dirs": []
+}

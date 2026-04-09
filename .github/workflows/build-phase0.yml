@@ -1,0 +1,43 @@
+name: Build Phase0 Bundle
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+    paths:
+      - "src/phase0.py"
+      - "installers/phase0/**"
+      - "pyproject.toml"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Build phase0 bundle
+        run: ./installers/phase0/bundle.sh
+
+      - name: Smoke test bundled phase0
+        run: |
+          unzip -q dist/phase0/comprehensity-phase0-*.zip -d /tmp/phase0-bundle
+          BUNDLE_DIR="$(find /tmp/phase0-bundle -mindepth 1 -maxdepth 1 -type d | head -n 1)"
+          python3 "$BUNDLE_DIR/phase0.py" tests/fixtures/repos/py_simple -o /tmp/phase0-scan.json
+          test -s /tmp/phase0-scan.json
+          bash "$BUNDLE_DIR/phase0.sh" tests/fixtures/repos/py_simple --install-guide > /tmp/phase0-install-guide.txt
+          test -s /tmp/phase0-install-guide.txt
+
+      - name: Upload phase0 artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase0-bundle
+          path: dist/phase0/*
+          if-no-files-found: error

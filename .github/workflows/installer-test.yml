@@ -1,0 +1,155 @@
+name: Phase1 installer smoke test
+
+on:
+  # Daily build for Linux + Windows
+  schedule:
+    - cron: '0 6 * * *'   # 06:00 UTC daily
+  # Manual trigger — checkbox to optionally include macOS
+  workflow_dispatch:
+    inputs:
+      include_macos:
+        description: 'Include macOS build (10x minute cost)'
+        type: boolean
+        default: false
+
+jobs:
+  # -------------------------------------------------------------------------
+  # Linux + Windows: run daily on schedule and on manual dispatch
+  # -------------------------------------------------------------------------
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v8.0.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: "pyproject.toml"
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          uv venv
+          uv pip install pyinstaller -e ".[dev,lang-all]"
+
+      - name: Build bundle
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            .venv/Scripts/pyinstaller installer/comprehensity.spec
+          else
+            .venv/bin/pyinstaller installer/comprehensity.spec
+          fi
+
+      - name: Smoke test — entry points start
+        shell: bash
+        run: |
+          EXT=$([[ "$RUNNER_OS" == "Windows" ]] && echo ".exe" || echo "")
+          dist/comprehensity/comprehensity-scan${EXT} --help
+          dist/comprehensity/extract-blueprint${EXT} --help
+          dist/comprehensity/treepeat${EXT} --help
+          # jedi-language-server is an LSP server with no --help/--version;
+          # launch it with a timeout to verify it starts without crashing
+          timeout 5 dist/comprehensity/jedi-language-server${EXT} || true
+
+      - name: Smoke test — grammar parses Python source
+        shell: bash
+        run: |
+          EXT=$([[ "$RUNNER_OS" == "Windows" ]] && echo ".exe" || echo "")
+          OUT=$(mktemp)
+          dist/comprehensity/extract-blueprint${EXT} src/ -o "$OUT" 2>&1 | tail -5
+          test -s "$OUT"
+
+      - name: Smoke test — rthook finds bundled jedi
+        shell: bash
+        run: |
+          EXT=$([[ "$RUNNER_OS" == "Windows" ]] && echo ".exe" || echo "")
+          OUT=$(mktemp)
+          dist/comprehensity/extract-blueprint${EXT} src/ --semantic -o "$OUT" 2>&1 \
+            | tee /tmp/semantic_out.txt | tail -10
+          # Fail if jedi was not found via the rthook PATH injection
+          if grep -q "jedi-language-server.*not found\|jedi.*not installed" /tmp/semantic_out.txt; then
+            echo "ERROR: rthook did not put bundled jedi-language-server on PATH"
+            exit 1
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: comprehensity-phase1-${{ runner.os }}
+          path: dist/comprehensity/
+          retention-days: 7
+          if-no-files-found: error
+
+  # -------------------------------------------------------------------------
+  # macOS: manual dispatch only, opt-in via checkbox
+  # -------------------------------------------------------------------------
+  build-macos:
+    if: github.event_name == 'workflow_dispatch' && inputs.include_macos
+    runs-on: macos-latest
+    env:
+      # actions/setup-python@v5 runs on Node.js 20; opt into Node.js 24 now
+      # before GitHub forces the migration on 2026-06-02.
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+    steps:
+      - uses: actions/checkout@v6
+      # Pin to 3.12 — stable for PyInstaller, avoids Homebrew 3.14 on the runner.
+      - uses: actions/setup-python@v5
+        id: pysetup
+        with:
+          python-version: '3.12'
+
+      - name: Verify Python and install dependencies
+        run: |
+          # Confirm we have the right Python before building
+          "${{ steps.pysetup.outputs.python-path }}" --version
+          "${{ steps.pysetup.outputs.python-path }}" -m venv .venv
+          .venv/bin/pip install pyinstaller -e ".[dev,lang-all]"
+          # Confirm jedi-language-server is present (required for bundle)
+          .venv/bin/jedi-language-server --version || .venv/bin/pip show jedi-language-server
+
+      - name: Build bundle
+        run: .venv/bin/pyinstaller installer/comprehensity.spec
+
+      - name: Inspect bundle binary
+        run: |
+          file dist/comprehensity/comprehensity-scan
+          otool -L dist/comprehensity/comprehensity-scan || true
+          codesign -dv --verbose=4 dist/comprehensity/comprehensity-scan 2>&1 || true
+          spctl --assess --type execute --verbose=4 dist/comprehensity/comprehensity-scan 2>&1 || true
+
+      - name: Smoke test — entry points start
+        run: |
+          dist/comprehensity/comprehensity-scan --help
+          dist/comprehensity/extract-blueprint --help
+          dist/comprehensity/treepeat --help
+          timeout 5 dist/comprehensity/jedi-language-server || true
+
+      - name: Smoke test — grammar parses Python source
+        run: |
+          OUT=$(mktemp)
+          dist/comprehensity/extract-blueprint src/ -o "$OUT" 2>&1 | tail -5
+          test -s "$OUT"
+
+      - name: Smoke test — rthook finds bundled jedi
+        run: |
+          OUT=$(mktemp)
+          dist/comprehensity/extract-blueprint src/ --semantic -o "$OUT" 2>&1 \
+            | tee /tmp/semantic_out.txt | tail -10
+          if grep -q "jedi-language-server.*not found\|jedi.*not installed" /tmp/semantic_out.txt; then
+            echo "ERROR: rthook did not put bundled jedi-language-server on PATH"
+            exit 1
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: comprehensity-phase1-macOS
+          path: dist/comprehensity/
+          retention-days: 7
+          if-no-files-found: error

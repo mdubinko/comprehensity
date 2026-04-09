@@ -1,0 +1,12 @@
+{
+  "format": "phase0",
+  "version": "0.1",
+  "extensions": {
+    ".md": 1
+  },
+  "languages": {},
+  "primary_languages": [],
+  "build_configs": [],
+  "monorepo": false,
+  "generated_dirs": []
+}

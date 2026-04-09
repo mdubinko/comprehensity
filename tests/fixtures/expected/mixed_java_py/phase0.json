@@ -1,0 +1,31 @@
+{
+  "format": "phase0",
+  "version": "0.1",
+  "extensions": {
+    ".java": 2,
+    ".py": 2,
+    ".toml": 1,
+    ".xml": 1
+  },
+  "languages": {
+    "java": 2,
+    "python": 2
+  },
+  "primary_languages": ["java", "python"],
+  "build_configs": [
+    {
+      "path": "pom.xml",
+      "kind": "maven",
+      "depth": 0
+    },
+    {
+      "path": "pyproject.toml",
+      "kind": "pyproject",
+      "depth": 0
+    }
+  ],
+  "monorepo": false,
+  "generated_dirs": [
+    "target"
+  ]
+}

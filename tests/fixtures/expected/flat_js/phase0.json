@@ -1,0 +1,17 @@
+{
+  "format": "phase0",
+  "version": "0.1",
+  "extensions": {
+    ".js": 3,
+    ".json": 1
+  },
+  "languages": {
+    "javascript": 3
+  },
+  "primary_languages": ["javascript"],
+  "build_configs": [
+    {"path": "package.json", "kind": "npm", "depth": 0}
+  ],
+  "monorepo": false,
+  "generated_dirs": []
+}

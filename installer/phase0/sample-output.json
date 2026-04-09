@@ -1,0 +1,28 @@
+{
+  "format": "phase0",
+  "version": "0.1",
+  "root": "/path/to/project",
+  "extensions": {
+    ".py": 3,
+    ".toml": 1
+  },
+  "languages": {
+    "python": 3
+  },
+  "build_configs": [
+    {
+      "path": "pyproject.toml",
+      "kind": "pyproject",
+      "depth": 0
+    }
+  ],
+  "monorepo": false,
+  "generated_dirs": [],
+  "runtimes": {
+    "node": null,
+    "npm": null,
+    "go": null,
+    "java": null,
+    "rust": null
+  }
+}

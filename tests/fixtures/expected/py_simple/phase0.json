@@ -1,0 +1,17 @@
+{
+  "format": "phase0",
+  "version": "0.1",
+  "extensions": {
+    ".py": 3,
+    ".toml": 1
+  },
+  "languages": {
+    "python": 3
+  },
+  "primary_languages": ["python"],
+  "build_configs": [
+    {"path": "pyproject.toml", "kind": "pyproject", "depth": 0}
+  ],
+  "monorepo": false,
+  "generated_dirs": []
+}

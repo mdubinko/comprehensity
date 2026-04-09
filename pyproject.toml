@@ -1,0 +1,81 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "comprehensity"
+version = "0.1.0"
+description = "Evaluate AI codegen quality by analyzing code structure, dependencies, and duplicates"
+requires-python = ">=3.8"
+dependencies = [
+    "pydantic>=2.0",
+    "tree-sitter>=0.21",
+    "igraph>=0.11",
+    "tomli>=2.0; python_version < '3.11'",
+    "pyyaml>=6.0",
+    "tqdm>=4.0",
+]
+
+[project.optional-dependencies]
+# Language grammar packages — installer selects only what the target codebase needs.
+# Each is a small precompiled wheel; no native build step required.
+lang-python     = ["tree-sitter-python"]
+lang-javascript = ["tree-sitter-javascript"]
+lang-typescript = ["tree-sitter-javascript", "tree-sitter-typescript"]
+lang-java       = ["tree-sitter-java"]
+lang-c          = ["tree-sitter-c"]
+lang-cpp        = ["tree-sitter-c", "tree-sitter-cpp"]
+lang-go         = ["tree-sitter-go"]
+lang-rust       = ["tree-sitter-rust"]
+lang-ruby       = ["tree-sitter-ruby"]
+lang-csharp     = ["tree-sitter-c-sharp"]
+lang-kotlin     = ["tree-sitter-kotlin"]
+lang-swift      = ["tree-sitter-swift"]
+# Clone detection backend — AST-based duplicate finder
+clone = ["treepeat>=0.4"]
+# Convenience bundle: all supported languages
+lang-all = [
+    "tree-sitter-python",
+    "tree-sitter-javascript",
+    "tree-sitter-typescript",
+    "tree-sitter-java",
+    "tree-sitter-c",
+    "tree-sitter-cpp",
+    "tree-sitter-go",
+    "tree-sitter-rust",
+    "tree-sitter-ruby",
+    "tree-sitter-c-sharp",
+    "tree-sitter-kotlin",
+    "tree-sitter-swift",
+]
+dev = [
+    "pytest>=7.0",
+    "pydantic>=2.0",
+    "igraph>=0.11",
+    "treepeat>=0.4",
+    "jedi-language-server",
+    "tree-sitter-python",
+    "tree-sitter-javascript",
+    "tree-sitter-typescript",
+    "tree-sitter-java",
+    "tree-sitter-c",
+    "tree-sitter-cpp",
+]
+
+[project.scripts]
+extract-blueprint = "extract_blueprint:main"
+comprehensity-scan = "phase0:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-dir]
+"" = "src"
+
+
+[tool.uv.sources]
+treepeat = { git = "https://github.com/mdubinko/treepeat.git" }
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
