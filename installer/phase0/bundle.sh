@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
-INSTALLER_DIR="$ROOT_DIR/installers/phase0"
+INSTALLER_DIR="$ROOT_DIR/installer/phase0"
 DIST_DIR="$ROOT_DIR/dist/phase0"
 
 if ! command -v python3 >/dev/null 2>&1; then

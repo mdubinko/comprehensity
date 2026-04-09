@@ -7,7 +7,7 @@ on:
       - "v*"
     paths:
       - "src/phase0.py"
-      - "installers/phase0/**"
+      - "installer/phase0/**"
       - "pyproject.toml"
 
 jobs:
@@ -24,7 +24,7 @@ jobs:
           python-version: "3.11"
 
       - name: Build phase0 bundle
-        run: ./installers/phase0/bundle.sh
+        run: ./installer/phase0/bundle.sh
 
       - name: Smoke test bundled phase0
         run: |
