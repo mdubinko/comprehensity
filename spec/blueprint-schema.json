@@ -1,0 +1,921 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Comprehensity Blueprint",
+  "description": "Exchange format produced by extract-blueprint (phase 1) and consumed by analyze-blueprint (phase 2+). The format and version fields are fixed literals; a document that does not match is rejected at parse time.\n\nThis schema is generated directly from the Pydantic models in blueprint.py and is the authoritative contract between phases.",
+  "$defs": {
+    "BlueprintSummary": {
+      "description": "Human-readable index of blueprint contents.\n\nAppears near the top of the serialized file so clients can audit scope\nand provenance before deciding whether to share the blueprint.\n\nSections are listed in inspection priority order:\n  1. config_path \u2014 provenance: what machine/config produced this\n  2. Section counts \u2014 scope: how much data is present\n  3. Status flags   \u2014 completeness: which passes ran",
+      "properties": {
+        "config_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Config Path"
+        },
+        "files": {
+          "default": 0,
+          "title": "Files",
+          "type": "integer"
+        },
+        "externals": {
+          "default": 0,
+          "title": "Externals",
+          "type": "integer"
+        },
+        "configs": {
+          "default": 0,
+          "title": "Configs",
+          "type": "integer"
+        },
+        "symbols": {
+          "default": 0,
+          "title": "Symbols",
+          "type": "integer"
+        },
+        "reference_edges": {
+          "default": 0,
+          "title": "Reference Edges",
+          "type": "integer"
+        },
+        "dead_symbols": {
+          "default": 0,
+          "title": "Dead Symbols",
+          "type": "integer"
+        },
+        "diagnostics": {
+          "default": 0,
+          "title": "Diagnostics",
+          "type": "integer"
+        },
+        "modules": {
+          "default": 0,
+          "title": "Modules",
+          "type": "integer"
+        },
+        "clone_blocks": {
+          "default": 0,
+          "title": "Clone Blocks",
+          "type": "integer"
+        },
+        "files_parsed_ok": {
+          "default": 0,
+          "title": "Files Parsed Ok",
+          "type": "integer"
+        },
+        "files_parse_errors": {
+          "default": 0,
+          "title": "Files Parse Errors",
+          "type": "integer"
+        },
+        "files_no_grammar": {
+          "default": 0,
+          "title": "Files No Grammar",
+          "type": "integer"
+        },
+        "modularity_status": {
+          "default": "stub",
+          "title": "Modularity Status",
+          "type": "string"
+        },
+        "clone_status": {
+          "default": "stub",
+          "title": "Clone Status",
+          "type": "string"
+        },
+        "semantic_status": {
+          "default": "stub",
+          "title": "Semantic Status",
+          "type": "string"
+        },
+        "dead_code_status": {
+          "default": "stub",
+          "title": "Dead Code Status",
+          "type": "string"
+        },
+        "diagnostic_status": {
+          "default": "stub",
+          "title": "Diagnostic Status",
+          "type": "string"
+        },
+        "llm_status": {
+          "default": "stub",
+          "title": "Llm Status",
+          "type": "string"
+        }
+      },
+      "title": "BlueprintSummary",
+      "type": "object"
+    },
+    "CloneBlock": {
+      "description": "A set of code regions that are duplicates of each other.\n\nMinimum two instances (a clone is by definition a pair or larger group).\nlines / tokens are the size of one instance, not the total across all.\n\nkind:\n  \"exact\"       \u2014 truly identical AST (treepeat ruleset: none)\n  \"normalized\"  \u2014 whitespace, string literals, function names normalized\n                  (treepeat ruleset: default)\n  \"approximate\" \u2014 additionally anonymizes identifiers and constants\n                  (treepeat ruleset: loose)\n  \"semantic\"    \u2014 reserved for future semantic / embedding-based detection",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "default": "exact",
+          "enum": [
+            "exact",
+            "normalized",
+            "approximate",
+            "semantic",
+            "boilerplate"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "instances": {
+          "items": {
+            "$ref": "#/$defs/CloneInstance"
+          },
+          "minItems": 2,
+          "title": "Instances",
+          "type": "array"
+        },
+        "lines": {
+          "minimum": 1,
+          "title": "Lines",
+          "type": "integer"
+        },
+        "tokens": {
+          "minimum": 0,
+          "title": "Tokens",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "instances",
+        "lines",
+        "tokens"
+      ],
+      "title": "CloneBlock",
+      "type": "object"
+    },
+    "CloneInstance": {
+      "description": "One occurrence of a duplicated code region.\n\nhash : SHA-256 hex digest of the normalized content (whitespace-collapsed,\n       comment-stripped). Instances in the same CloneBlock must share the\n       same hash; analyze_blueprint warns if they do not.",
+      "properties": {
+        "file_id": {
+          "title": "File Id",
+          "type": "string"
+        },
+        "start_line": {
+          "minimum": 1,
+          "title": "Start Line",
+          "type": "integer"
+        },
+        "end_line": {
+          "minimum": 1,
+          "title": "End Line",
+          "type": "integer"
+        },
+        "hash": {
+          "title": "Hash",
+          "type": "string"
+        }
+      },
+      "required": [
+        "file_id",
+        "start_line",
+        "end_line",
+        "hash"
+      ],
+      "title": "CloneInstance",
+      "type": "object"
+    },
+    "ConfigEntry": {
+      "description": "A parsed build / project configuration file found in the scanned tree.\n\nThese are identified by filename (pyproject.toml, pom.xml, go.mod, \u2026),\nnot by extension, and are stored separately from FileEntry nodes.\n\nid        : stable string \"cfg0\", \"cfg1\", \u2026 sorted by path\npath      : path relative to scan root, posix separators\nkind      : build system identifier \u2014 see _CONFIG_FILE_NAMES in blueprint_io.py\nroot_path : directory this config owns (posix, relative to scan root, \"\" = root)\nname      : declared project / artifact / package name\nversion   : declared version string\nraw_deps  : direct declared external dependencies (package names or group:artifact)\nmodules   : child module paths declared in this file (Maven <modules>, Gradle\n            includes, npm workspaces, Cargo workspace members) \u2014 relative posix\n            paths from this config's directory\nparent_id : ConfigEntry.id of the nearest ancestor config of the same kind,\n            if one exists (Maven parent POM, Gradle root settings, etc.)",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "kind": {
+          "title": "Kind",
+          "type": "string"
+        },
+        "root_path": {
+          "title": "Root Path",
+          "type": "string"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Version"
+        },
+        "raw_deps": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Raw Deps",
+          "type": "array"
+        },
+        "modules": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Modules",
+          "type": "array"
+        },
+        "parent_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Parent Id"
+        }
+      },
+      "required": [
+        "id",
+        "path",
+        "kind",
+        "root_path"
+      ],
+      "title": "ConfigEntry",
+      "type": "object"
+    },
+    "DeadSymbol": {
+      "description": "A symbol that appears to be unused or dead.\n\nStub: populated by the semantic pass; absent in basic extraction.\n\nid         : \"dead_0\", \"dead_1\", \u2026\nsymbol_id  : references SymbolEntry.id\nconfidence : 0.0 (guess) \u2013 1.0 (certain)\nreason     : classification of why the symbol is considered dead",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "symbol_id": {
+          "title": "Symbol Id",
+          "type": "string"
+        },
+        "confidence": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "reason": {
+          "default": "unreferenced",
+          "enum": [
+            "unreferenced",
+            "test_only",
+            "unreachable",
+            "interface_only"
+          ],
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "symbol_id",
+        "confidence"
+      ],
+      "title": "DeadSymbol",
+      "type": "object"
+    },
+    "DiagnosticEntry": {
+      "description": "A diagnostic (error, warning, etc.) reported by a language server.\n\nStub: populated by the semantic (LSP) pass; absent in basic extraction.\n\nfile_id   : references FileEntry.id\nline      : 1-based line where the diagnostic starts\ncol       : 1-based column where the diagnostic starts\nend_line  : 1-based line where the diagnostic ends (>= line)\nend_col   : 1-based column where the diagnostic ends\nseverity  : \"error\" | \"warning\" | \"information\" | \"hint\"\ncode      : server-specific diagnostic code, e.g. \"reportMissingImports\"\nmessage   : human-readable diagnostic message\nsource    : language server that produced this, e.g. \"pyright\", \"typescript\"",
+      "properties": {
+        "file_id": {
+          "title": "File Id",
+          "type": "string"
+        },
+        "line": {
+          "minimum": 1,
+          "title": "Line",
+          "type": "integer"
+        },
+        "col": {
+          "minimum": 1,
+          "title": "Col",
+          "type": "integer"
+        },
+        "end_line": {
+          "minimum": 1,
+          "title": "End Line",
+          "type": "integer"
+        },
+        "end_col": {
+          "minimum": 1,
+          "title": "End Col",
+          "type": "integer"
+        },
+        "severity": {
+          "enum": [
+            "error",
+            "warning",
+            "information",
+            "hint"
+          ],
+          "title": "Severity",
+          "type": "string"
+        },
+        "code": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Code"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "source": {
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "file_id",
+        "line",
+        "col",
+        "end_line",
+        "end_col",
+        "severity",
+        "message",
+        "source"
+      ],
+      "title": "DiagnosticEntry",
+      "type": "object"
+    },
+    "ExternalEntry": {
+      "description": "A dependency that lives outside the scanned tree (stdlib or package).\n\nid   : \"ext_{name}\", e.g. \"ext_numpy\", \"ext_os\" \u2014 derived from name,\n       so unique within a blueprint without a separate lookup.\nkind : \"system\"  \u2014 standard library (os, stdio.h, java.lang)\n       \"package\" \u2014 third-party dependency (numpy, lodash)\n       \"unknown\" \u2014 could not be classified",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "kind": {
+          "default": "unknown",
+          "enum": [
+            "system",
+            "package",
+            "unknown"
+          ],
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "title": "ExternalEntry",
+      "type": "object"
+    },
+    "FileEntry": {
+      "description": "A source file in the scanned codebase.\n\nid      : stable string identifier, e.g. \"f0\", \"f1\", sorted by path\nimports : adjacency list \u2014 IDs of FileEntry or ExternalEntry nodes that\n          this file imports directly. Reverse edges (imported_by) are\n          computed at analysis time, not stored.",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "size_bytes": {
+          "minimum": 0,
+          "title": "Size Bytes",
+          "type": "integer"
+        },
+        "line_count": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Line Count",
+          "type": "integer"
+        },
+        "ext": {
+          "title": "Ext",
+          "type": "string"
+        },
+        "imports": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Imports",
+          "type": "array"
+        },
+        "comment_desc": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Comment Desc"
+        },
+        "has_parse_errors": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Has Parse Errors"
+        }
+      },
+      "required": [
+        "id",
+        "path",
+        "size_bytes",
+        "ext"
+      ],
+      "title": "FileEntry",
+      "type": "object"
+    },
+    "LockfileEntry": {
+      "description": "A dependency lockfile found in the scanned tree.\n\nPresence indicates that someone ran the package manager and committed the\nresult \u2014 a basic reproducibility signal.  Absence means installs may\nproduce different dependency trees on different machines or at different\ntimes.\n\npath : path relative to scan root, posix separators\nkind : lock manager \u2014 \"npm\" | \"yarn\" | \"pnpm\" | \"poetry\" | \"cargo\" |\n                      \"go\" | \"bundler\" | \"composer\" | \"pipenv\" | \"bun\"",
+      "properties": {
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "kind": {
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "kind"
+      ],
+      "title": "LockfileEntry",
+      "type": "object"
+    },
+    "ModuleEntry": {
+      "description": "A detected module boundary in the source tree.\n\nLevel semantics:\n  L2 \u2014 language package: Python __init__.py directory, Java package\n       declaration, Go directory package.\n  L3 \u2014 build unit: directory containing a build manifest such as\n       package.json, go.mod, Cargo.toml, pom.xml, pyproject.toml.\n  L4 \u2014 graph cluster: community detected via Louvain on the import graph.\n\nid         : stable string \"m0\", \"m1\", ... (L2/L3) or \"cl0\", \"cl1\", ...\n             (L4) sorted by min file_id within the cluster\nlevel      : \"L2\", \"L3\", or \"L4\"\nname       : human-readable identifier (package dotted name, build dir,\n             or \"cluster_N\" / LLM label for L4)\nroot_path  : directory path relative to scan root, posix separators, no\n             trailing slash; \"\" means the scan root itself (always \"\" for L4)\nfile_ids   : FileEntry IDs that belong to this module\nbuild_kind : L3 only \u2014 the build system detected (\"npm\", \"pyproject\",\n             \"go\", \"cargo\", \"maven\", \"gradle\", \"setuptools\", \"cmake\",\n             \"make\", or \"unknown\")\nlabel      : L4 only \u2014 short LLM-generated concept label (set by Bite 5)",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "level": {
+          "enum": [
+            "L2",
+            "L3",
+            "L4"
+          ],
+          "title": "Level",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "root_path": {
+          "title": "Root Path",
+          "type": "string"
+        },
+        "file_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "File Ids",
+          "type": "array"
+        },
+        "build_kind": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Build Kind"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "ca": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ca"
+        },
+        "ce": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ce"
+        },
+        "instability": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Instability"
+        },
+        "abstractness": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Abstractness"
+        },
+        "distance": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Distance"
+        }
+      },
+      "required": [
+        "id",
+        "level",
+        "name",
+        "root_path"
+      ],
+      "title": "ModuleEntry",
+      "type": "object"
+    },
+    "ReferenceEdge": {
+      "description": "A call/reference from one symbol to another.\n\nStub: populated by the semantic (LSP) pass; absent in basic extraction.\n\nfrom_symbol_id   : the symbol that calls or references the target\nto_symbol_id     : the symbol being called or referenced\ncall_site_file_id: file where the call/reference occurs (derivable from\n                   from_symbol_id \u2192 SymbolEntry.file_id, but explicit for\n                   cross-file queries without a full symbol lookup)\ncall_site_line   : 1-based line of the call/reference site",
+      "properties": {
+        "from_symbol_id": {
+          "title": "From Symbol Id",
+          "type": "string"
+        },
+        "to_symbol_id": {
+          "title": "To Symbol Id",
+          "type": "string"
+        },
+        "call_site_file_id": {
+          "title": "Call Site File Id",
+          "type": "string"
+        },
+        "call_site_line": {
+          "minimum": 1,
+          "title": "Call Site Line",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "from_symbol_id",
+        "to_symbol_id",
+        "call_site_file_id",
+        "call_site_line"
+      ],
+      "title": "ReferenceEdge",
+      "type": "object"
+    },
+    "SymbolEntry": {
+      "description": "A named, locatable symbol in a source file.\n\nid         : stable string, e.g. \"s0\", \"s1\", sorted by (file_id, start_line)\nfile_id    : references FileEntry.id\nname       : unqualified symbol name (no path prefix)\nkind       : coarse classification \u2014 function / method / class / \u2026\nstart_line : 1-based line where the symbol definition begins\nend_line   : 1-based line where the definition ends (>= start_line)\nis_exported: True if the symbol is visible outside its file/module",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "file_id": {
+          "title": "File Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "function",
+            "method",
+            "class",
+            "interface",
+            "variable",
+            "other"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "start_line": {
+          "minimum": 1,
+          "title": "Start Line",
+          "type": "integer"
+        },
+        "end_line": {
+          "minimum": 1,
+          "title": "End Line",
+          "type": "integer"
+        },
+        "is_exported": {
+          "default": false,
+          "title": "Is Exported",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "file_id",
+        "name",
+        "kind",
+        "start_line",
+        "end_line"
+      ],
+      "title": "SymbolEntry",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "format": {
+      "const": "comprehensity-blueprint",
+      "default": "comprehensity-blueprint",
+      "title": "Format",
+      "type": "string"
+    },
+    "version": {
+      "const": "1",
+      "default": "1",
+      "title": "Version",
+      "type": "string"
+    },
+    "generated_at": {
+      "format": "date-time",
+      "title": "Generated At",
+      "type": "string"
+    },
+    "runtime_info": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Runtime Info"
+    },
+    "summary": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/BlueprintSummary"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "config_path": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Config Path"
+    },
+    "config_raw": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Config Raw"
+    },
+    "files": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/FileEntry"
+      },
+      "title": "Files",
+      "type": "array"
+    },
+    "externals": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/ExternalEntry"
+      },
+      "title": "Externals",
+      "type": "array"
+    },
+    "configs": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/ConfigEntry"
+      },
+      "title": "Configs",
+      "type": "array"
+    },
+    "lockfiles": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/LockfileEntry"
+      },
+      "title": "Lockfiles",
+      "type": "array"
+    },
+    "symbols": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/SymbolEntry"
+      },
+      "title": "Symbols",
+      "type": "array"
+    },
+    "reference_edges": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/ReferenceEdge"
+      },
+      "title": "Reference Edges",
+      "type": "array"
+    },
+    "dead_symbols": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/DeadSymbol"
+      },
+      "title": "Dead Symbols",
+      "type": "array"
+    },
+    "diagnostics": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/DiagnosticEntry"
+      },
+      "title": "Diagnostics",
+      "type": "array"
+    },
+    "modules": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/ModuleEntry"
+      },
+      "title": "Modules",
+      "type": "array"
+    },
+    "modularity_status": {
+      "default": "stub",
+      "enum": [
+        "stub",
+        "complete"
+      ],
+      "title": "Modularity Status",
+      "type": "string"
+    },
+    "clone_blocks": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/CloneBlock"
+      },
+      "title": "Clone Blocks",
+      "type": "array"
+    },
+    "clone_status": {
+      "default": "stub",
+      "enum": [
+        "stub",
+        "complete",
+        "timeout"
+      ],
+      "title": "Clone Status",
+      "type": "string"
+    },
+    "semantic_status": {
+      "default": "stub",
+      "enum": [
+        "stub",
+        "complete"
+      ],
+      "title": "Semantic Status",
+      "type": "string"
+    },
+    "semantic_skip_reasons": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Semantic Skip Reasons",
+      "type": "array"
+    },
+    "dead_code_status": {
+      "default": "stub",
+      "enum": [
+        "stub",
+        "complete"
+      ],
+      "title": "Dead Code Status",
+      "type": "string"
+    },
+    "diagnostic_status": {
+      "default": "stub",
+      "enum": [
+        "stub",
+        "complete"
+      ],
+      "title": "Diagnostic Status",
+      "type": "string"
+    },
+    "llm_status": {
+      "default": "stub",
+      "enum": [
+        "stub",
+        "complete",
+        "skipped"
+      ],
+      "title": "Llm Status",
+      "type": "string"
+    }
+  },
+  "type": "object"
+}

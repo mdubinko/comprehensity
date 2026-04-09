@@ -460,6 +460,10 @@ files are classified as test files and which are treated as production code.
 You can open this file in any text editor and read it yourself before uploading it.
 Nothing is sent automatically.
 
+The complete field-by-field specification is in [`spec/blueprint-schema.json`](spec/blueprint-schema.json)
+— a standard JSON Schema document that also serves as the machine-verifiable contract
+between Phase 1 (extraction) and Phase 2 (analysis).
+
 ---
 
 ## Zero LLM exposure in Phase 0/1
