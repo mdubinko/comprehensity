@@ -113,3 +113,11 @@ Customer uploads blueprint.json  ──────→ Phase 2 (analyze_blueprin
 Source code never leaves the customer's machine. Only the structural blueprint
 (file paths, import edges, symbol names, clone hashes) is shared, and only
 when the customer explicitly initiates the upload.
+
+---
+
+## Repository security posture
+
+This repository has automated **CodeQL analysis** enabled for static security
+scanning, as well as **Dependabot** vulnerability and malware alerts for all
+dependencies.
