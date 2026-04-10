@@ -329,6 +329,7 @@ Examples:
             clone_ruleset=args.clone_ruleset,
             ignore_dirs=_ignore_dirs,
             clone_sarif_path=clone_sarif_path,
+            show_progress=args.progress and HAS_TQDM,
         )
         _t_blueprint = time.perf_counter() - _t0
 

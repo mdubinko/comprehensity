@@ -491,7 +491,8 @@ def _detect_clone_lang_groups(abs_file_id_map: Dict[str, str]) -> Dict[str, froz
 
 
 def _run_treepeat_lazy(root_path, ruleset, file_id_map, ignore_dirs=(),
-                       exclude_exts=(), sarif_save_path=None):
+                       exclude_exts=(), sarif_save_path=None,
+                       show_progress=False):
     from clone_detection import run_treepeat
     # Java getters/setters are 3-5 lines with braces; raise the threshold so
     # they don't flood the clone report with trivial boilerplate.
@@ -512,7 +513,8 @@ def _run_treepeat_lazy(root_path, ruleset, file_id_map, ignore_dirs=(),
             ignore_globs.append(g)
     return run_treepeat(root_path, ruleset=ruleset, file_id_map=file_id_map,
                         min_lines=min_lines, ignore_patterns=tuple(ignore_globs),
-                        sarif_save_path=sarif_save_path)
+                        sarif_save_path=sarif_save_path,
+                        show_progress=show_progress)
 
 
 def _extract_symbols(
@@ -549,6 +551,7 @@ def sourcegraph_to_blueprint(
     detect_modules: bool = True,
     ignore_dirs: tuple = (),
     clone_sarif_path: Optional[Path] = None,
+    show_progress: bool = False,
 ) -> Blueprint:
     """Convert a SourceGraph to a Blueprint.
 
@@ -870,7 +873,7 @@ def sourcegraph_to_blueprint(
         if len(lang_groups) <= 1:
             clones, any_timeout = _run_treepeat_lazy(
                 sg_root_path, clone_ruleset, abs_file_id_map, ignore_dirs,
-                sarif_save_path=clone_sarif_path)
+                sarif_save_path=clone_sarif_path, show_progress=show_progress)
         else:
             all_primary_exts: frozenset = frozenset(
                 e for exts in lang_groups.values() for e in exts
@@ -890,6 +893,7 @@ def sourcegraph_to_blueprint(
                     sg_root_path, clone_ruleset, lang_file_id_map, ignore_dirs,
                     exclude_exts=all_primary_exts - lang_exts,
                     sarif_save_path=lang_sarif,
+                    show_progress=show_progress,
                 )
                 all_clones.extend(lang_clones)
                 any_timeout = any_timeout or lang_timeout

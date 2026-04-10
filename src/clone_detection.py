@@ -188,6 +188,7 @@ def run_treepeat(
     ignore_patterns: Sequence[str] = (),
     file_id_map: Optional[Dict[str, str]] = None,
     sarif_save_path: Optional["Path"] = None,
+    show_progress: bool = False,
 ) -> Tuple[List[CloneBlock], bool]:
     """Invoke treepeat and return (CloneBlocks, timed_out).
 
@@ -200,6 +201,8 @@ def run_treepeat(
                          built automatically as abs_path → path_relative_to_root.
         sarif_save_path: If given, copy the SARIF output to this path instead of
                          deleting it. Useful for debugging and standalone delivery.
+        show_progress:   If True, pass --progress to treepeat and let stderr
+                         inherit the terminal so tqdm renders correctly.
 
     Returns:
         (blocks, timed_out): sorted CloneBlocks (empty on timeout/error) and a
@@ -236,6 +239,8 @@ def run_treepeat(
     ]
     if ignore_patterns:
         cmd += ["--ignore", ",".join(ignore_patterns)]
+    if show_progress:
+        cmd += ["--progress"]
 
     with tempfile.NamedTemporaryFile(suffix=".sarif", delete=False) as tmp:
         sarif_path = Path(tmp.name)
@@ -243,11 +248,12 @@ def run_treepeat(
     cmd += ["-o", str(sarif_path)]
     # Run treepeat in its own process group so we can kill the entire tree
     # (including any parallel workers treepeat spawns) on timeout or error.
+    # When show_progress=True, inherit stderr so tqdm renders to the terminal.
     t0 = _time.monotonic()
     proc = subprocess.Popen(
         cmd,
         stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        stderr=None if show_progress else subprocess.PIPE,
         start_new_session=True,
     )
     try:
@@ -256,7 +262,7 @@ def run_treepeat(
         # and either crash or run >4500s with minimal/no output. Cut losses early.
         _, stderr_bytes = proc.communicate(timeout=1200)
         elapsed = _time.monotonic() - t0
-        stderr_text = stderr_bytes.decode(errors="replace")
+        stderr_text = (stderr_bytes or b"").decode(errors="replace")
         if proc.returncode != 0:
             from applog import warn
             warn("⚠️  treepeat failed (exit %d) after %.0fs; skipping clone detection\n%s",
