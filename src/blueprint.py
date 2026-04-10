@@ -377,6 +377,26 @@ class BlueprintSummary(BaseModel):
     llm_status: str = "stub"
 
 
+class AnalysisWarning(BaseModel):
+    """A structured warning about incomplete or degraded analysis.
+
+    Appended by extract_blueprint whenever a phase was skipped or degraded
+    (e.g. node_modules absent, LSP server missing, clone detection timed out).
+    Phase 2 surfaces these prominently so users know what to fix before re-running.
+
+    phase    : which analysis phase was affected ("semantic", "clone", "phase1", etc.)
+    code     : machine-readable key ("no_node_modules", "lsp_skip", "clone_timeout", etc.)
+    severity : "degraded" | "skipped" | "error"
+    message  : human-readable description of what was skipped or degraded
+    action   : concrete command or step the user should run to fix it (empty string if N/A)
+    """
+    phase: str
+    code: str
+    severity: Literal["degraded", "skipped", "error"]
+    message: str
+    action: str = ""
+
+
 # ---------------------------------------------------------------------------
 # Top-level container
 # ---------------------------------------------------------------------------
@@ -434,6 +454,10 @@ class Blueprint(BaseModel):
     dead_code_status: Literal["stub", "complete"] = "stub"
     diagnostic_status: Literal["stub", "complete"] = "stub"
     llm_status: Literal["stub", "complete", "skipped"] = "stub"
+
+    # Structured warnings about incomplete/degraded analysis — populated by
+    # extract_blueprint when a phase was skipped or ran with reduced fidelity.
+    analysis_warnings: List[AnalysisWarning] = []
 
     # ------------------------------------------------------------------
     # Summary computation

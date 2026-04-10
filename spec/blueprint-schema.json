@@ -3,6 +3,36 @@
   "title": "Comprehensity Blueprint",
   "description": "Exchange format produced by extract-blueprint (phase 1) and consumed by analyze-blueprint (phase 2+). The format and version fields are fixed literals; a document that does not match is rejected at parse time.\n\nThis schema is generated directly from the Pydantic models in blueprint.py and is the authoritative contract between phases.",
   "$defs": {
+    "AnalysisWarning": {
+      "description": "A structured warning about incomplete or degraded analysis.\n\nAppended by extract_blueprint whenever a phase was skipped or degraded\n(e.g. node_modules absent, LSP server missing, clone detection timed out).\nPhase 2 surfaces these prominently so users know what to fix before re-running.\n\nphase    : which analysis phase was affected (\"semantic\", \"clone\", \"phase1\", etc.)\ncode     : machine-readable key (\"no_node_modules\", \"lsp_skip\", \"clone_timeout\", etc.)\nseverity : \"degraded\" | \"skipped\" | \"error\"\nmessage  : human-readable description of what was skipped or degraded\naction   : concrete command or step the user should run to fix it (empty string if N/A)",
+      "properties": {
+        "phase": {
+          "title": "Phase",
+          "type": "string"
+        },
+        "code": {
+          "title": "Code",
+          "type": "string"
+        },
+        "severity": {
+          "enum": ["degraded", "skipped", "error"],
+          "title": "Severity",
+          "type": "string"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "action": {
+          "default": "",
+          "title": "Action",
+          "type": "string"
+        }
+      },
+      "required": ["phase", "code", "severity", "message"],
+      "title": "AnalysisWarning",
+      "type": "object"
+    },
     "BlueprintSummary": {
       "description": "Human-readable index of blueprint contents.\n\nAppears near the top of the serialized file so clients can audit scope\nand provenance before deciding whether to share the blueprint.\n\nSections are listed in inspection priority order:\n  1. config_path \u2014 provenance: what machine/config produced this\n  2. Section counts \u2014 scope: how much data is present\n  3. Status flags   \u2014 completeness: which passes ran",
       "properties": {
@@ -915,6 +945,14 @@
       ],
       "title": "Llm Status",
       "type": "string"
+    },
+    "analysis_warnings": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/AnalysisWarning"
+      },
+      "title": "Analysis Warnings",
+      "type": "array"
     }
   },
   "type": "object"

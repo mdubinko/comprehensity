@@ -183,6 +183,9 @@ _EXT_TO_LANG: Dict[str, str] = {
 _RUNTIME_SPECS: List[Tuple[str, str, List[str], bool, str]] = [
     ("node", "node",  ["node",  "--version"], False, r"v?(\d+\.\d+\.\d+)"),
     ("npm",  "npm",   ["npm",   "--version"], False, r"(\d+\.\d+\.\d+)"),
+    ("yarn", "yarn",  ["yarn",  "--version"], False, r"(\d+\.\d+\.\d+)"),
+    ("pnpm", "pnpm",  ["pnpm",  "--version"], False, r"(\d+\.\d+\.\d+)"),
+    ("bun",  "bun",   ["bun",   "--version"], False, r"(\d+\.\d+\.\d+)"),
     ("go",   "go",    ["go",    "version"],   False, r"go(\d+\.\d+(?:\.\d+)?)"),
     ("java", "java",  ["java",  "-version"],  True,  r"(\d+(?:\.\d+)+)"),
     ("rust", "rustc", ["rustc", "--version"], False, r"rustc\s+(\d+\.\d+\.\d+)"),
@@ -204,6 +207,114 @@ def detect_runtimes() -> Dict[str, Optional[str]]:
         except Exception:
             result[key] = None
     return result
+
+
+def detect_js_package_manager(root: Path) -> Optional[Dict[str, Any]]:
+    """Detect which JS package manager the project at *root* requires.
+
+    Detection priority:
+      1. ``packageManager`` field in root ``package.json`` (authoritative)
+      2. Lock-file heuristics: pnpm-lock.yaml → pnpm; yarn.lock+.yarnrc.yml → yarn-berry;
+         yarn.lock alone → yarn-classic; bun.lockb → bun; package-lock.json → npm
+      3. Fallback: npm (package.json exists, no lockfile)
+
+    Returns a dict::
+
+        {
+          "required":          "npm" | "yarn-classic" | "yarn-berry" | "pnpm" | "bun",
+          "version_required":  "4.4.1" | None,       # from packageManager field
+          "detection_source":  "packageManager-field" | "lockfile" | "fallback",
+          "installed":         True | False,          # is the required tool present?
+          "installed_version": "1.22.19" | None,      # what is actually installed
+        }
+
+    Returns ``None`` when *root* has no ``package.json`` (not a JS/TS project).
+    Never raises.
+    """
+    pkg_json = root / "package.json"
+    if not pkg_json.exists():
+        return None
+
+    required = "npm"
+    version_required: Optional[str] = None
+    detection_source = "fallback"
+
+    # --- 1. packageManager field (authoritative) ---
+    try:
+        data = json.loads(pkg_json.read_text(encoding="utf-8"))
+        pm_field = data.get("packageManager", "")
+        if pm_field and "@" in pm_field:
+            tool, _, ver = pm_field.partition("@")
+            tool = tool.strip()
+            ver = ver.strip() or None
+            if tool == "yarn":
+                try:
+                    major = int(ver.split(".")[0]) if ver else 0
+                except (ValueError, AttributeError):
+                    major = 0
+                required = "yarn-berry" if major >= 2 else "yarn-classic"
+            elif tool in ("pnpm", "bun", "npm"):
+                required = tool
+            else:
+                required = tool
+            version_required = ver
+            detection_source = "packageManager-field"
+    except Exception:
+        pass
+
+    # --- 2. Lock-file heuristics ---
+    if detection_source == "fallback":
+        if (root / "pnpm-lock.yaml").exists():
+            required, detection_source = "pnpm", "lockfile"
+        elif (root / ".yarnrc.yml").exists() and (root / "yarn.lock").exists():
+            required, detection_source = "yarn-berry", "lockfile"
+        elif (root / "yarn.lock").exists():
+            required, detection_source = "yarn-classic", "lockfile"
+        elif (root / "bun.lockb").exists():
+            required, detection_source = "bun", "lockfile"
+        elif (root / "package-lock.json").exists():
+            required, detection_source = "npm", "lockfile"
+
+    # --- 3. Check what's installed ---
+    def _probe(binary: str, cmd: List[str], pat: str) -> Optional[str]:
+        if not shutil.which(binary):
+            return None
+        try:
+            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+            m = re.search(pat, proc.stdout.strip())
+            return m.group(1) if m else None
+        except Exception:
+            return None
+
+    installed_version: Optional[str] = None
+    installed = False
+
+    if required == "npm":
+        v = _probe("npm", ["npm", "--version"], r"(\d+\.\d+\.\d+)")
+        installed, installed_version = v is not None, v
+    elif required in ("yarn-berry", "yarn-classic"):
+        v = _probe("yarn", ["yarn", "--version"], r"(\d+\.\d+\.\d+)")
+        installed_version = v
+        if v is not None:
+            try:
+                major = int(v.split(".")[0])
+            except (ValueError, IndexError):
+                major = 0
+            installed = (major >= 2) if required == "yarn-berry" else (major == 1)
+    elif required == "pnpm":
+        v = _probe("pnpm", ["pnpm", "--version"], r"(\d+\.\d+\.\d+)")
+        installed, installed_version = v is not None, v
+    elif required == "bun":
+        v = _probe("bun", ["bun", "--version"], r"(\d+\.\d+\.\d+)")
+        installed, installed_version = v is not None, v
+
+    return {
+        "required":          required,
+        "version_required":  version_required,
+        "detection_source":  detection_source,
+        "installed":         installed,
+        "installed_version": installed_version,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -271,7 +382,7 @@ def scan(root: str) -> Dict[str, Any]:
         if count >= _PRIMARY_FILE_THRESHOLD:
             primary_langs.add(lang)
 
-    return {
+    out: Dict[str, Any] = {
         "format":            "phase0",
         "version":           "0.1",
         "root":              str(root_path),
@@ -283,6 +394,12 @@ def scan(root: str) -> Dict[str, Any]:
         "generated_dirs":    sorted(generated_dirs),
         "runtimes":          detect_runtimes(),
     }
+    _JS_LANGS = {"javascript", "typescript"}
+    if _JS_LANGS & set(lang_counts):
+        pm_info = detect_js_package_manager(root_path)
+        if pm_info is not None:
+            out["js_package_manager"] = pm_info
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -407,15 +524,55 @@ def recommend_installs(scan_result: Dict[str, Any]) -> Dict[str, Any]:
             step["note"] = missing_prereq
         manual_steps.append(step)
 
+    # Package manager install guidance (only for managers that aren't installed).
+    pkg_manager_steps: List[Dict[str, Any]] = []
+    js_pm = scan_result.get("js_package_manager")
+    if js_pm and not js_pm.get("installed", True):
+        req = js_pm.get("required", "npm")
+        installed_ver = js_pm.get("installed_version")  # e.g. "1.22.19" if classic installed
+        if req == "yarn-berry":
+            if installed_ver is None:
+                pkg_manager_steps.append({
+                    "tool":    "yarn-berry",
+                    "setup":   "npm install -g corepack && corepack enable",
+                    "install": "yarn install",
+                    "note":    "Project requires Yarn Berry but no Yarn is installed.",
+                })
+            else:
+                pkg_manager_steps.append({
+                    "tool":    "yarn-berry",
+                    "setup":   "corepack enable",
+                    "install": "yarn install",
+                    "note":    (
+                        f"Project requires Yarn Berry; Yarn Classic ({installed_ver}) is installed"
+                        " — enable corepack first."
+                    ),
+                })
+        elif req == "pnpm":
+            pkg_manager_steps.append({
+                "tool":    "pnpm",
+                "setup":   "npm install -g pnpm",
+                "install": "pnpm install",
+                "note":    "Project requires pnpm but it is not installed.",
+            })
+        elif req == "bun":
+            pkg_manager_steps.append({
+                "tool":    "bun",
+                "setup":   "npm install -g bun",
+                "install": "bun install",
+                "note":    "Project requires bun but it is not installed.",
+            })
+
     return {
         "python_requirement": {
             "phase1_min": "3.8+",
             "current": f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
             "ready": sys.version_info >= (3, 8),
         },
-        "grammar_packages": grammar_set,
-        "pip_auto":         pip_auto,
-        "manual_steps":     manual_steps,
+        "grammar_packages":   grammar_set,
+        "pip_auto":           pip_auto,
+        "manual_steps":       manual_steps,
+        "pkg_manager_steps":  pkg_manager_steps,
     }
 
 
@@ -474,6 +631,12 @@ def render_install_guide(recs: Dict[str, Any]) -> List[str]:
                 lines.append(f"  [{step['lang']}] {step['command']}")
             else:
                 lines.append(f"  [{step['lang']}] {step.get('note', step['command'])}")
+    if recs.get("pkg_manager_steps"):
+        lines.append("Package manager setup (run before semantic analysis):")
+        for step in recs["pkg_manager_steps"]:
+            lines.append(f"  [{step['tool']}] {step['note']}")
+            lines.append(f"    1. {step['setup']}")
+            lines.append(f"    2. {step['install']}")
     return lines
 
 

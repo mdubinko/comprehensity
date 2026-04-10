@@ -25,11 +25,11 @@ except ImportError:
 
 import applog
 from blueprint import (
-    Blueprint, ConfigEntry, DeadSymbol, DiagnosticEntry, ExternalEntry, FileEntry,
-    LockfileEntry, ReferenceEdge, SymbolEntry,
+    AnalysisWarning, Blueprint, ConfigEntry, DeadSymbol, DiagnosticEntry, ExternalEntry,
+    FileEntry, LockfileEntry, ReferenceEdge, SymbolEntry,
 )
 from lsp_client import LspClient
-from phase0 import _BUILD_CONFIGS as _PHASE0_BUILD_CONFIGS
+from phase0 import _BUILD_CONFIGS as _PHASE0_BUILD_CONFIGS, detect_js_package_manager
 from srcgraph import SourceGraph
 
 # ---------------------------------------------------------------------------
@@ -1416,6 +1416,49 @@ def enrich_blueprint_semantic(bp: Blueprint, root: Path, show_progress: bool = F
     if not lang_files:
         return bp
 
+    # JS/TS preflight: node_modules must exist for the language server to resolve types.
+    # If absent, skip JS/TS and emit a structured AnalysisWarning with the fix command.
+    new_warnings: List[AnalysisWarning] = list(bp.analysis_warnings)
+    _js_langs = {"javascript", "typescript"}
+    if _js_langs & set(lang_files) and not (root / "node_modules").exists():
+        pm_info = detect_js_package_manager(root)
+        if pm_info is None or pm_info["required"] == "npm":
+            action = "run: npm install"
+        elif pm_info["required"] == "yarn-berry":
+            if pm_info.get("installed_version") is None:
+                action = "run: npm install -g corepack && corepack enable && yarn install"
+            else:
+                action = "run: corepack enable && yarn install"
+        elif pm_info["required"] == "yarn-classic":
+            action = "run: yarn install"
+        elif pm_info["required"] == "pnpm":
+            action = "run: pnpm install"
+        elif pm_info["required"] == "bun":
+            action = "run: bun install"
+        else:
+            action = "run: npm install"
+        new_warnings.append(AnalysisWarning(
+            phase="semantic",
+            code="no_node_modules",
+            severity="skipped",
+            message=(
+                "node_modules not found at project root; "
+                "JavaScript/TypeScript semantic analysis skipped."
+            ),
+            action=action,
+        ))
+        applog.warn(
+            "⚠️  node_modules not found at %s; skipping JS/TS semantic enrichment (%s)",
+            root,
+            action,
+        )
+        for lang_id in list(_js_langs):
+            lang_files.pop(lang_id, None)
+
+    if not lang_files:
+        return bp.model_copy(update={"analysis_warnings": new_warnings}) \
+               if new_warnings != list(bp.analysis_warnings) else bp
+
     # Collect merged results across languages.
     all_ref_edges: List[ReferenceEdge] = []
     all_diagnostics: List[DiagnosticEntry] = []
@@ -1466,10 +1509,14 @@ def enrich_blueprint_semantic(bp: Blueprint, root: Path, show_progress: bool = F
         enriched_any = True
 
     if not enriched_any:
-        return bp.model_copy(update={"semantic_skip_reasons": skip_reasons}) \
-               if skip_reasons else bp
+        update: dict = {}
+        if skip_reasons:
+            update["semantic_skip_reasons"] = skip_reasons
+        if new_warnings != list(bp.analysis_warnings):
+            update["analysis_warnings"] = new_warnings
+        return bp.model_copy(update=update) if update else bp
 
-    return bp.model_copy(update={
+    update = {
         "reference_edges": all_ref_edges,
         "dead_symbols": all_dead_symbols,
         "diagnostics": all_diagnostics,
@@ -1477,4 +1524,7 @@ def enrich_blueprint_semantic(bp: Blueprint, root: Path, show_progress: bool = F
         "semantic_skip_reasons": skip_reasons,
         "dead_code_status": "complete",
         "diagnostic_status": "complete",
-    })
+    }
+    if new_warnings != list(bp.analysis_warnings):
+        update["analysis_warnings"] = new_warnings
+    return bp.model_copy(update=update)

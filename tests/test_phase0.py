@@ -6,7 +6,7 @@ from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 import subprocess
-from phase0 import scan, detect_runtimes, recommend_installs, _RUNTIME_SPECS
+from phase0 import scan, detect_runtimes, recommend_installs, detect_js_package_manager, _RUNTIME_SPECS
 
 
 REPOS = Path(__file__).parent / "fixtures" / "repos"
@@ -27,6 +27,7 @@ def run(scenario: str) -> dict:
     result = scan(str(REPOS / scenario))
     result.pop("root")
     result.pop("runtimes")  # machine-specific; tested separately
+    result.pop("js_package_manager", None)  # installed/version fields are machine-specific
     return result
 
 
@@ -50,6 +51,27 @@ def test_fixture(scenario):
 # Targeted assertions — keep these alongside the parametrised test so that
 # failures point directly at the feature that broke.
 # ---------------------------------------------------------------------------
+
+def test_js_package_manager_in_flat_js():
+    result = scan(str(REPOS / "flat_js"))
+    pm = result.get("js_package_manager")
+    assert pm is not None
+    assert pm["required"] == "npm"
+    assert pm["detection_source"] == "fallback"
+    assert set(pm.keys()) == {"required", "version_required", "detection_source", "installed", "installed_version"}
+
+
+def test_js_package_manager_in_ts_monorepo():
+    result = scan(str(REPOS / "ts_monorepo"))
+    pm = result.get("js_package_manager")
+    assert pm is not None
+    assert pm["required"] == "npm"
+
+
+def test_js_package_manager_absent_for_python_only():
+    result = scan(str(REPOS / "py_simple"))
+    assert "js_package_manager" not in result
+
 
 def test_monorepo_detected():
     result = run("ts_monorepo")
@@ -133,7 +155,7 @@ def test_runtimes_present_in_scan_output():
     result = scan(str(REPOS / "py_simple"))
     assert "runtimes" in result
     assert isinstance(result["runtimes"], dict)
-    assert set(result["runtimes"].keys()) == {"node", "npm", "go", "java", "rust"}
+    assert set(result["runtimes"].keys()) == {"node", "npm", "yarn", "pnpm", "bun", "go", "java", "rust"}
 
 
 def test_runtimes_values_are_string_or_none():
@@ -327,7 +349,9 @@ def test_recommend_grammars_deduplicated():
 
 def test_recommend_output_keys():
     result = recommend_installs(_scan_with({}, {}))
-    assert set(result.keys()) == {"python_requirement", "grammar_packages", "pip_auto", "manual_steps"}
+    assert set(result.keys()) == {
+        "python_requirement", "grammar_packages", "pip_auto", "manual_steps", "pkg_manager_steps",
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -357,3 +381,198 @@ def test_cli_output_flag(tmp_path):
         main()
     data = json.loads(out_file.read_text())
     assert data["format"] == "phase0"
+
+
+# ---------------------------------------------------------------------------
+# detect_js_package_manager tests
+# ---------------------------------------------------------------------------
+
+def _write_pkg_json(tmp_path, content: dict):
+    (tmp_path / "package.json").write_text(
+        json.dumps(content), encoding="utf-8"
+    )
+
+
+def test_pkgmgr_no_package_json(tmp_path):
+    assert detect_js_package_manager(tmp_path) is None
+
+
+def test_pkgmgr_field_yarn_berry(tmp_path):
+    _write_pkg_json(tmp_path, {"name": "app", "packageManager": "yarn@4.4.1"})
+    result = detect_js_package_manager(tmp_path)
+    assert result["required"] == "yarn-berry"
+    assert result["version_required"] == "4.4.1"
+    assert result["detection_source"] == "packageManager-field"
+
+
+def test_pkgmgr_field_yarn_classic(tmp_path):
+    _write_pkg_json(tmp_path, {"name": "app", "packageManager": "yarn@1.22.19"})
+    result = detect_js_package_manager(tmp_path)
+    assert result["required"] == "yarn-classic"
+    assert result["version_required"] == "1.22.19"
+    assert result["detection_source"] == "packageManager-field"
+
+
+def test_pkgmgr_field_pnpm(tmp_path):
+    _write_pkg_json(tmp_path, {"name": "app", "packageManager": "pnpm@8.0.0"})
+    result = detect_js_package_manager(tmp_path)
+    assert result["required"] == "pnpm"
+    assert result["version_required"] == "8.0.0"
+    assert result["detection_source"] == "packageManager-field"
+
+
+def test_pkgmgr_field_bun(tmp_path):
+    _write_pkg_json(tmp_path, {"name": "app", "packageManager": "bun@1.0.0"})
+    result = detect_js_package_manager(tmp_path)
+    assert result["required"] == "bun"
+    assert result["detection_source"] == "packageManager-field"
+
+
+def test_pkgmgr_field_npm(tmp_path):
+    _write_pkg_json(tmp_path, {"name": "app", "packageManager": "npm@10.2.4"})
+    result = detect_js_package_manager(tmp_path)
+    assert result["required"] == "npm"
+    assert result["detection_source"] == "packageManager-field"
+
+
+def test_pkgmgr_lockfile_pnpm(tmp_path):
+    _write_pkg_json(tmp_path, {"name": "app"})
+    (tmp_path / "pnpm-lock.yaml").write_text("lockfileVersion: '6.0'", encoding="utf-8")
+    result = detect_js_package_manager(tmp_path)
+    assert result["required"] == "pnpm"
+    assert result["detection_source"] == "lockfile"
+
+
+def test_pkgmgr_lockfile_yarn_berry(tmp_path):
+    _write_pkg_json(tmp_path, {"name": "app"})
+    (tmp_path / "yarn.lock").write_text("", encoding="utf-8")
+    (tmp_path / ".yarnrc.yml").write_text("yarnPath: .yarn/releases/yarn-4.4.1.cjs\n", encoding="utf-8")
+    result = detect_js_package_manager(tmp_path)
+    assert result["required"] == "yarn-berry"
+    assert result["detection_source"] == "lockfile"
+
+
+def test_pkgmgr_lockfile_yarn_classic(tmp_path):
+    _write_pkg_json(tmp_path, {"name": "app"})
+    (tmp_path / "yarn.lock").write_text("", encoding="utf-8")
+    result = detect_js_package_manager(tmp_path)
+    assert result["required"] == "yarn-classic"
+    assert result["detection_source"] == "lockfile"
+
+
+def test_pkgmgr_lockfile_bun(tmp_path):
+    _write_pkg_json(tmp_path, {"name": "app"})
+    (tmp_path / "bun.lockb").write_bytes(b"")
+    result = detect_js_package_manager(tmp_path)
+    assert result["required"] == "bun"
+    assert result["detection_source"] == "lockfile"
+
+
+def test_pkgmgr_lockfile_npm(tmp_path):
+    _write_pkg_json(tmp_path, {"name": "app"})
+    (tmp_path / "package-lock.json").write_text("{}", encoding="utf-8")
+    result = detect_js_package_manager(tmp_path)
+    assert result["required"] == "npm"
+    assert result["detection_source"] == "lockfile"
+
+
+def test_pkgmgr_fallback_npm(tmp_path):
+    _write_pkg_json(tmp_path, {"name": "app"})
+    result = detect_js_package_manager(tmp_path)
+    assert result["required"] == "npm"
+    assert result["detection_source"] == "fallback"
+
+
+def test_pkgmgr_packagemanager_field_beats_lockfile(tmp_path):
+    """packageManager field takes priority over lock files."""
+    _write_pkg_json(tmp_path, {"name": "app", "packageManager": "pnpm@8.0.0"})
+    (tmp_path / "yarn.lock").write_text("", encoding="utf-8")
+    result = detect_js_package_manager(tmp_path)
+    assert result["required"] == "pnpm"
+    assert result["detection_source"] == "packageManager-field"
+
+
+def test_pkgmgr_result_keys(tmp_path):
+    _write_pkg_json(tmp_path, {"name": "app"})
+    result = detect_js_package_manager(tmp_path)
+    assert set(result.keys()) == {
+        "required", "version_required", "detection_source", "installed", "installed_version",
+    }
+
+
+def test_recommend_pkg_manager_yarn_berry_not_installed(tmp_path):
+    """recommend_installs emits pkg_manager_steps when yarn-berry is needed but absent."""
+    scan_result = _scan_with({"typescript": 5}, {"node": "20.0.0"})
+    scan_result["js_package_manager"] = {
+        "required": "yarn-berry",
+        "version_required": "4.4.1",
+        "detection_source": "packageManager-field",
+        "installed": False,
+        "installed_version": None,
+    }
+    result = recommend_installs(scan_result)
+    steps = result["pkg_manager_steps"]
+    assert len(steps) == 1
+    assert steps[0]["tool"] == "yarn-berry"
+    assert "corepack" in steps[0]["setup"]
+    assert steps[0]["install"] == "yarn install"
+
+
+def test_recommend_pkg_manager_yarn_berry_classic_installed(tmp_path):
+    """When classic yarn is installed but Berry needed, corepack-only setup emitted."""
+    scan_result = _scan_with({"typescript": 5}, {"node": "20.0.0"})
+    scan_result["js_package_manager"] = {
+        "required": "yarn-berry",
+        "version_required": "4.4.1",
+        "detection_source": "packageManager-field",
+        "installed": False,
+        "installed_version": "1.22.19",
+    }
+    result = recommend_installs(scan_result)
+    steps = result["pkg_manager_steps"]
+    assert steps[0]["setup"] == "corepack enable"
+
+
+def test_recommend_pkg_manager_pnpm_not_installed():
+    scan_result = _scan_with({"typescript": 5}, {"node": "20.0.0"})
+    scan_result["js_package_manager"] = {
+        "required": "pnpm",
+        "version_required": "8.0.0",
+        "detection_source": "lockfile",
+        "installed": False,
+        "installed_version": None,
+    }
+    result = recommend_installs(scan_result)
+    steps = result["pkg_manager_steps"]
+    assert steps[0]["tool"] == "pnpm"
+    assert "pnpm install" in steps[0]["install"]
+
+
+def test_recommend_pkg_manager_installed_no_steps():
+    """No pkg_manager_steps when package manager is already installed."""
+    scan_result = _scan_with({"typescript": 5}, {"node": "20.0.0"})
+    scan_result["js_package_manager"] = {
+        "required": "yarn-berry",
+        "version_required": "4.4.1",
+        "detection_source": "packageManager-field",
+        "installed": True,
+        "installed_version": "4.4.1",
+    }
+    result = recommend_installs(scan_result)
+    assert result["pkg_manager_steps"] == []
+
+
+def test_pkgmgr_pnpm_beats_yarn_lock(tmp_path):
+    """pnpm-lock.yaml takes priority over yarn.lock."""
+    _write_pkg_json(tmp_path, {"name": "app"})
+    (tmp_path / "pnpm-lock.yaml").write_text("lockfileVersion: '6.0'", encoding="utf-8")
+    (tmp_path / "yarn.lock").write_text("", encoding="utf-8")
+    result = detect_js_package_manager(tmp_path)
+    assert result["required"] == "pnpm"
+
+
+def test_runtime_specs_include_yarn_pnpm_bun():
+    keys = [spec[0] for spec in _RUNTIME_SPECS]
+    assert "yarn" in keys
+    assert "pnpm" in keys
+    assert "bun" in keys

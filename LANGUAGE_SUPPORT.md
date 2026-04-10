@@ -108,6 +108,30 @@ directs the user to install it; once Node is present, npx handles the rest.
 
 **Status:** Implemented. Server launches via npx; no global install required.
 
+#### Package manager considerations
+
+Phase 1 (import graph, symbol extraction) runs on source files directly and is unaffected
+by package manager choice. Semantic analysis requires `node_modules` to be present so the
+language server can resolve type definitions.
+
+| Situation | What happens | Fix |
+|---|---|---|
+| `node_modules/` present (any manager) | Semantic runs normally | — |
+| `node_modules/` absent, npm/yarn-classic | `analysis_warnings` entry emitted; semantic skipped | `npm install` or `yarn install` |
+| Yarn Berry (`packageManager: yarn@4+`) | Same skip + corepack-specific guidance | `corepack enable && yarn install` |
+| pnpm | Same skip + pnpm guidance | `pnpm install` |
+| bun | Same skip + bun guidance | `bun install` |
+
+**Yarn Berry PnP (Plug'n'Play):** Projects using `nodeLinker: pnp` in `.yarnrc.yml` have no
+`node_modules/` by design and instead use a `.pnp.cjs` loader. This is the hard case: even
+after `yarn install`, `node_modules` will still be absent. Proper support requires installing
+the Yarn SDK editor shim (`yarn dlx @yarnpkg/sdks vscode`) and is currently out of scope.
+
+extract_blueprint detects the required package manager via the `packageManager` field in
+`package.json` (authoritative) or lock-file heuristics, and stores the result in
+`js_package_manager` in the phase0 scan output. The install guide (`--install-guide`) includes
+actionable commands for each unsupported manager.
+
 #### Known limitation: TypeScript path aliases
 
 TypeScript projects frequently configure path aliases in `tsconfig.json` (e.g. `@app/`,

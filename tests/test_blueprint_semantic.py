@@ -205,8 +205,9 @@ class TestEnrichSemanticSingleLanguage:
 # ---------------------------------------------------------------------------
 
 class TestEnrichSemanticMultiLanguage:
-    def test_two_languages_results_merged(self):
+    def test_two_languages_results_merged(self, tmp_path):
         """Reference edges and diagnostics from both languages are combined."""
+        (tmp_path / "node_modules").mkdir()  # satisfy no_node_modules preflight
         py_fe = _fe("f0", "src/main.py", ext=".py")
         ts_fe = _fe("f1", "src/app.ts", ext=".ts")
         sym_py = _sym("s0", "f0", name="py_func")
@@ -250,7 +251,7 @@ class TestEnrichSemanticMultiLanguage:
         with patch("shutil.which", return_value="/usr/bin/server"):
             with patch("blueprint_io.LspClient", return_value=mock_client):
                 with patch("blueprint_io.enrich_blueprint_with_lsp", side_effect=_side):
-                    result = enrich_blueprint_semantic(bp, ROOT)
+                    result = enrich_blueprint_semantic(bp, tmp_path)
 
         assert call_count["n"] == 2
         assert len(result.reference_edges) == 2
@@ -287,8 +288,9 @@ class TestEnrichSemanticMultiLanguage:
 
         assert sum(1 for d in result.dead_symbols if d.symbol_id == "s0") == 1
 
-    def test_one_server_missing_other_still_enriches(self):
+    def test_one_server_missing_other_still_enriches(self, tmp_path):
         """If Python server is missing but TS is present, TS enrichment runs."""
+        (tmp_path / "node_modules").mkdir()  # satisfy no_node_modules preflight
         py_fe = _fe("f0", "src/main.py", ext=".py")
         ts_fe = _fe("f1", "src/app.ts", ext=".ts")
         bp = _bp(py_fe, ts_fe)
@@ -319,7 +321,7 @@ class TestEnrichSemanticMultiLanguage:
         with patch("shutil.which", side_effect=which_side):
             with patch("blueprint_io.LspClient", return_value=mock_client):
                 with patch("blueprint_io.enrich_blueprint_with_lsp", side_effect=_side):
-                    result = enrich_blueprint_semantic(bp, ROOT)
+                    result = enrich_blueprint_semantic(bp, tmp_path)
 
         assert result.semantic_status == "complete"
         assert len(result.reference_edges) == 1
