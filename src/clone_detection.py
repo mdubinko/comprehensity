@@ -40,6 +40,23 @@ def _find_treepeat_binary() -> Optional[str]:
     return shutil.which("treepeat")
 
 
+_USR_BIN_TIME = "/usr/bin/time"
+_TIME_FLAG = "-l" if sys.platform == "darwin" else "-v"
+# macOS -l: "   1234567  maximum resident set size" (bytes)
+# Linux -v: "Maximum resident set size (kbytes): 12345"
+_RSS_RE_MACOS = re.compile(r"^\s*(\d+)\s+maximum resident set size", re.MULTILINE)
+_RSS_RE_LINUX = re.compile(r"Maximum resident set size \(kbytes\):\s*(\d+)", re.MULTILINE)
+
+
+def _parse_peak_rss_mb(text: str) -> Optional[float]:
+    """Return peak RSS in MiB from /usr/bin/time stderr output, or None."""
+    if sys.platform == "darwin":
+        m = _RSS_RE_MACOS.search(text)
+        return int(m.group(1)) / (1024 * 1024) if m else None
+    m = _RSS_RE_LINUX.search(text)
+    return int(m.group(1)) / 1024 if m else None
+
+
 # Treepeat ruleset → CloneBlock.kind
 RULESET_TO_KIND = {
     "none": "exact",
@@ -246,6 +263,11 @@ def run_treepeat(
         sarif_path = Path(tmp.name)
 
     cmd += ["-o", str(sarif_path)]
+    # Wrap with /usr/bin/time when available to capture peak RSS in stderr.
+    # Skipped when show_progress=True because stderr is inherited by the terminal.
+    _measure_rss = not show_progress and os.path.exists(_USR_BIN_TIME)
+    if _measure_rss:
+        cmd = [_USR_BIN_TIME, _TIME_FLAG] + cmd
     # Run treepeat in its own process group so we can kill the entire tree
     # (including any parallel workers treepeat spawns) on timeout or error.
     # When show_progress=True, inherit stderr so tqdm renders to the terminal.
@@ -269,6 +291,10 @@ def run_treepeat(
                  proc.returncode, elapsed, stderr_text)
             return [], True  # treat non-zero exit as a timeout/failure so clone_status != "complete"
         from applog import debug
+        if _measure_rss:
+            rss = _parse_peak_rss_mb(stderr_text)
+            if rss is not None:
+                debug("treepeat peak RSS: %.0f MiB (%.0fs)", rss, elapsed)
         if stderr_text.strip():
             debug("treepeat (%.0fs) stderr:\n%s", elapsed, stderr_text.rstrip())
         if sarif_save_path is not None:
