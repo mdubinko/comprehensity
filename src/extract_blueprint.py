@@ -345,6 +345,9 @@ Examples:
         bp.config_path = cfg_path
         bp.config_raw = _strip_phase2(cfg_raw)
 
+    from vcs import read_git_info
+    bp.vcs = read_git_info(root)
+
     if args.semantic:
         if not cfg.extract.semantic_enrichment:
             applog.summary(

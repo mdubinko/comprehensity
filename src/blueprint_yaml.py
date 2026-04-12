@@ -26,6 +26,7 @@ from blueprint import (
     ExternalEntry, FileEntry,
     ModuleEntry, ReferenceEdge,
     SymbolEntry,
+    VcsInfo,
 )
 
 # ---------------------------------------------------------------------------
@@ -459,6 +460,7 @@ def blueprint_to_yaml(bp: Blueprint) -> str:
         "dead_code_status": bp.dead_code_status,
         "diagnostic_status": bp.diagnostic_status,
         "llm_status": bp.llm_status,
+        "vcs": bp.vcs.model_dump() if bp.vcs is not None else None,
     }
 
     return yaml.dump(doc, Dumper=_Dumper, sort_keys=False,
@@ -506,4 +508,5 @@ def blueprint_from_yaml(raw: str) -> Blueprint:
         dead_code_status=doc.get("dead_code_status", "stub"),
         diagnostic_status=doc.get("diagnostic_status", "stub"),
         llm_status=doc.get("llm_status", "stub"),
+        vcs=VcsInfo(**doc["vcs"]) if doc.get("vcs") else None,
     )

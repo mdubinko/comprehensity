@@ -40,6 +40,7 @@ CLIENT_SIDE_FILES = [
     "ts_parsers.py",
     "import_analysis.py",
     "srcgraph.py",
+    "vcs.py",               # uses subprocess (local git binary), not networking
 ]
 
 # Top-level module names that indicate network capability.

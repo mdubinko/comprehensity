@@ -398,6 +398,30 @@ class AnalysisWarning(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# VCS metadata
+# ---------------------------------------------------------------------------
+
+class VcsInfo(BaseModel):
+    """Version control metadata for the scanned repository.
+
+    Populated by read_git_info() in vcs.py when a .git directory is found.
+    None on the Blueprint when no VCS root is detected.
+
+    scm           : version control system — "git" or "unknown"
+    vcs_ref       : full 40-char commit SHA, or None if unresolvable
+    vcs_branch    : branch name, or None for detached HEAD (e.g. historical checkouts)
+    vcs_timestamp : Unix committer timestamp from the commit object, or None
+                    (None when the object is packed rather than loose)
+    git_version   : installed git version, e.g. "2.44.0"; None if not on PATH
+    """
+    scm: Literal["git", "unknown"] = "unknown"
+    vcs_ref: Optional[str] = None
+    vcs_branch: Optional[str] = None
+    vcs_timestamp: Optional[int] = None
+    git_version: Optional[str] = None
+
+
+# ---------------------------------------------------------------------------
 # Top-level container
 # ---------------------------------------------------------------------------
 
@@ -458,6 +482,10 @@ class Blueprint(BaseModel):
     # Structured warnings about incomplete/degraded analysis — populated by
     # extract_blueprint when a phase was skipped or ran with reduced fidelity.
     analysis_warnings: List[AnalysisWarning] = []
+
+    # VCS metadata — populated when the scanned directory is inside a git repo.
+    # None when no .git directory is found (e.g. a plain directory checkout).
+    vcs: Optional[VcsInfo] = None
 
     # ------------------------------------------------------------------
     # Summary computation
