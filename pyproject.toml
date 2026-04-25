@@ -33,7 +33,7 @@ lang-csharp     = ["tree-sitter-c-sharp"]
 lang-kotlin     = ["tree-sitter-kotlin"]
 lang-swift      = ["tree-sitter-swift"]
 # Clone detection backend — AST-based duplicate finder
-clone = ["treepeat>=0.4"]
+clone = ["treepeat>=0.6.0"]
 # Convenience bundle: all supported languages
 lang-all = [
     "tree-sitter-python",
@@ -53,7 +53,7 @@ dev = [
     "pytest>=7.0",
     "pydantic>=2.0",
     "igraph>=0.11",
-    "treepeat>=0.4",
+    "treepeat>=0.6.0",
     "jedi-language-server",
     "tree-sitter-python",
     "tree-sitter-javascript",
@@ -73,9 +73,6 @@ where = ["src"]
 [tool.setuptools.package-dir]
 "" = "src"
 
-
-[tool.uv.sources]
-treepeat = { git = "https://github.com/mdubinko/treepeat.git" }
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
