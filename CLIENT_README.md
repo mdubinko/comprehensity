@@ -17,6 +17,14 @@ where code has been copy-pasted across the codebase, which dependencies are pull
 complexity. This gives you a concrete picture of where AI codegen has left behind technical debt
 and where human review should be focused.
 
+Most "agent readiness" tools evaluate process hygiene: CI pipelines, linters, test coverage,
+documentation. Comprehensity measures structural architecture — coupling, module boundaries,
+import topology, and clone density. These are the factors that determine whether an AI agent
+can reason about a change without overflowing its context window, producing incoherent edits
+across files, or duplicating logic that already exists elsewhere. Process hygiene and
+structural architecture are complementary; comprehensity covers the gap that hygiene tools
+leave.
+
 ---
 
 ## How it works: three phases, two machines
@@ -338,6 +346,11 @@ need import graph, clone, and modularity output.
 
 Duplicate code detection uses [treepeat](https://github.com/your-org/treepeat), a pure-Python
 library that compares syntax trees across files to find matching blocks. It runs three passes:
+
+> **Industry context**: GitClear (2025, n=211M changed lines) measured 12.3% of changed lines
+> as duplicated code in AI-assisted repositories, up from 8.3% before widespread AI adoption —
+> a 4x increase. The comprehensity clone report shows where your codebase stands relative to
+> that baseline.
 
 | Pass | What it finds | Example |
 |---|---|---|
