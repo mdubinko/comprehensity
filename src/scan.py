@@ -67,7 +67,7 @@ def should_ignore_file(
     return False
 
 
-def build_source_graph(root_path: str, args=None) -> SourceGraph:
+def build_source_graph(root_path: str, args=None, show_progress: bool = False) -> SourceGraph:
     """Build complete in-memory source graph with filtering"""
     root = Path(root_path).resolve()
 
@@ -112,6 +112,8 @@ def build_source_graph(root_path: str, args=None) -> SourceGraph:
 
     graph = SourceGraph(root_path=str(root))
 
+    _pbar = tqdm(desc="Scanning", unit="file", leave=False) if (show_progress and HAS_TQDM) else None
+
     # Walk through all files and directories
     def walk_directory(current_path: Path, current_depth: int = 0):
         if max_depth is not None and current_depth > max_depth:
@@ -123,12 +125,7 @@ def build_source_graph(root_path: str, args=None) -> SourceGraph:
             applog.warn("⚠️  cannot access %s: %s", current_path, e)
             return
 
-        # Use tqdm for progress if available and we have many items
-        items_to_process = items
-        if HAS_TQDM and len(items) > 10:
-            items_to_process = tqdm(items, desc="Scanning files", unit="file")
-
-        for item in items_to_process:
+        for item in items:
             try:
                 # Skip symlinks unless following them
                 if item.is_symlink() and not follow_symlinks:
@@ -167,6 +164,8 @@ def build_source_graph(root_path: str, args=None) -> SourceGraph:
                         size_bytes = 0
 
                     graph.add_file(filepath, size_bytes)
+                    if _pbar is not None:
+                        _pbar.update(1)
 
             except (OSError, PermissionError) as e:
                 applog.warn("⚠️  skipping %s: %s", item, e)
@@ -211,6 +210,8 @@ def build_source_graph(root_path: str, args=None) -> SourceGraph:
                 continue
 
     walk_directory(root)
+    if _pbar is not None:
+        _pbar.close()
     return graph
 
 

@@ -178,7 +178,13 @@ Examples:
     parser.add_argument(
         "--progress",
         action="store_true",
-        help="Show progress during scan (sets console level to INFO if not overridden)",
+        help="Force progress bars even when stderr is not a TTY (e.g. piped output). "
+             "Also sets console level to INFO if not overridden.",
+    )
+    parser.add_argument(
+        "--no-progress",
+        action="store_true",
+        help="Suppress progress bars even in an interactive terminal.",
     )
 
     # --- Import analysis ---
@@ -234,10 +240,17 @@ Examples:
 
     args = parser.parse_args()
 
-    # --progress implies INFO if no explicit --console was given
+    # --progress (explicit) implies INFO if no explicit --console was given.
+    # TTY auto-detection does not bump the log level.
     console_level = args.console
     if args.progress and console_level is None:
         console_level = "INFO"
+
+    show_progress = (
+        (args.progress or sys.stderr.isatty())
+        and HAS_TQDM
+        and not args.no_progress
+    )
 
     applog.configure(
         console_level=console_level,
@@ -294,7 +307,7 @@ Examples:
 
         # scan.build_source_graph expects an args namespace with these fields
         _t0 = time.perf_counter()
-        sg = scan.build_source_graph(str(root), args)
+        sg = scan.build_source_graph(str(root), args, show_progress=show_progress)
         _t_scan = time.perf_counter() - _t0
 
         applog.info("  graph built: %d files (%.1fs)", sg.file_count(), _t_scan)
@@ -329,7 +342,7 @@ Examples:
             clone_ruleset=args.clone_ruleset,
             ignore_dirs=_ignore_dirs,
             clone_sarif_path=clone_sarif_path,
-            show_progress=args.progress and HAS_TQDM,
+            show_progress=show_progress,
         )
         _t_blueprint = time.perf_counter() - _t0
 
@@ -358,7 +371,7 @@ Examples:
 
             applog.info("  running LSP semantic enrichment…")
             _t0 = time.perf_counter()
-            bp = enrich_blueprint_semantic(bp, root, show_progress=args.progress and HAS_TQDM)
+            bp = enrich_blueprint_semantic(bp, root, show_progress=show_progress)
             _t_semantic = time.perf_counter() - _t0
             bp.runtime_info = {**bp.runtime_info, "elapsed_semantic_s": round(_t_semantic, 1)}
             applog.info(
