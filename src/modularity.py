@@ -163,6 +163,10 @@ def _detect_l3(
                 if not _id_in_nested(fid, file_entries, root, nested_dirs)
             ]
 
+    # Drop build-manifest-only directories (e.g. cert generation Makefiles) that
+    # contain no source files — they aren't meaningful build units.
+    modules = [m for m in modules if m.file_ids or m.root_path == ""]
+
     return modules
 
 
