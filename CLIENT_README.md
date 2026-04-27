@@ -9,13 +9,14 @@ and how every claim is enforced — not just promised.
 ## What it does
 
 Comprehensity analyzes a codebase and produces structured insights about architectural health,
-import complexity, and duplicate code — with a particular focus on patterns that indicate
-AI-generated code needing human review.
+import complexity, and duplicate code — with a focus on the structural patterns that determine
+whether AI agents can make changes reliably in this codebase.
 
 The analysis produces a scorecard: which files are tightly coupled, which modules are fragile,
 where code has been copy-pasted across the codebase, which dependencies are pulling in the most
-complexity. This gives you a concrete picture of where AI codegen has left behind technical debt
-and where human review should be focused.
+complexity. This gives you a concrete picture of where AI-assisted development will be slow,
+error-prone, or likely to produce inconsistent edits — and where targeted refactoring will
+have the most leverage before you scale up AI involvement.
 
 Most "agent readiness" tools evaluate process hygiene: CI pipelines, linters, test coverage,
 documentation. Comprehensity measures structural architecture — coupling, module boundaries,
@@ -285,6 +286,92 @@ perform local analysis only — they do not make outbound calls.
 
 ---
 
+## Running Phase 1
+
+Phase 1 is the main analysis engine. It reads your source files locally — no code leaves your
+machine — and produces a `blueprint.yaml` file that you review before sending anything to the
+analysis server.
+
+### What you need
+
+- The comprehensity Phase 1 binary (provided as part of the engagement package)
+- Read access to the codebase you want to scan
+- The language servers identified in your Phase 0 install report (for `--semantic` mode only)
+
+### Basic usage
+
+```bash
+extract_blueprint /path/to/project -o blueprint.yaml
+```
+
+This produces `blueprint.yaml` — the structured summary of your codebase.
+
+To also detect duplicate code blocks:
+
+```bash
+extract_blueprint /path/to/project -o blueprint.yaml --detect-clones
+```
+
+This produces two files:
+
+```
+blueprint.yaml               ← import graph, symbols, modules
+blueprint.clones.sarif       ← clone detection report (SARIF format)
+```
+
+To also run semantic analysis (call graph, diagnostics):
+
+```bash
+extract_blueprint /path/to/project -o blueprint.yaml --detect-clones --semantic
+```
+
+The `--semantic` flag starts a language server, analyzes your code the same way your IDE
+would, and shuts the server down. It is optional and requires the language server identified
+in the Phase 0 install report.
+
+### What the output means
+
+`blueprint.yaml` contains file paths, import relationships, build config metadata, and
+optionally clone locations and symbol names. No source code is included. See
+[What leaves your environment](#what-leaves-your-environment) for a full field-by-field
+breakdown.
+
+A sample blueprint from the open-source `requests` library (v2.33.1) is provided in
+`samples/requests-blueprint.yaml` for reference. A sample Phase 2 report for the same
+codebase is in `samples/requests-report.md`.
+
+### Common errors
+
+**`extract_blueprint: command not found`**
+- Cause: the binary is not on your PATH.
+- Fix: open a new terminal after installation, or add the install directory to your PATH.
+
+**`No Python files found`** (or similar for other languages)
+- Cause: the target path contains no source files in a supported language.
+- Fix: pass the root of the source tree, not a subdirectory of configuration files.
+
+**`Language server not found`** (semantic mode only)
+- Cause: the language server for this codebase is not installed.
+- Fix: run Phase 0 with `--install-guide` for the exact install command, or omit
+  `--semantic` to skip semantic enrichment.
+
+**Analysis is very slow**
+- Cause: very large repositories, or `--semantic` on a large Python or Java project.
+- Fix: run without `--semantic` first. For clone detection on large repos, try
+  `--clone-ruleset exact` for a faster pass that finds only identical blocks.
+
+### Recommended operating procedure
+
+1. Run Phase 0 with `--install-guide` and follow the install guidance.
+2. Run `extract_blueprint /path/to/project -o blueprint.yaml` and confirm the file counts
+   look right.
+3. Add `--detect-clones` if clone detection is in scope.
+4. Add `--semantic` if a language server is installed and deeper analysis is wanted.
+5. Open `blueprint.yaml` and confirm it contains no unexpected data before forwarding it
+   to the Phase 2 analysis server.
+
+---
+
 ## The tools doing the work
 
 Phase 0 and Phase 1 use tools your developers almost certainly already run every day.
@@ -344,13 +431,14 @@ need import graph, clone, and modularity output.
 
 ### treepeat (clone detection)
 
-Duplicate code detection uses [treepeat](https://github.com/your-org/treepeat), a pure-Python
+Duplicate code detection uses [treepeat](https://pypi.org/project/treepeat/), a pure-Python
 library that compares syntax trees across files to find matching blocks. It runs three passes:
 
-> **Industry context**: GitClear (2025, n=211M changed lines) measured 12.3% of changed lines
-> as duplicated code in AI-assisted repositories, up from 8.3% before widespread AI adoption —
-> a 4x increase. The comprehensity clone report shows where your codebase stands relative to
-> that baseline.
+> **Industry context**: GitClear (2025, n=211M changed lines) found that AI-assisted
+> development produces duplicate code at 12.3% of changed lines, up from 8.3% pre-AI — a
+> 4x increase. Clone density above that threshold is a structural signal that agents will
+> produce inconsistent edits when changing shared patterns. The comprehensity clone report
+> shows where your codebase stands and where consolidation will have the most leverage.
 
 | Pass | What it finds | Example |
 |---|---|---|
