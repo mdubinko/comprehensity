@@ -1428,7 +1428,8 @@ def enrich_blueprint_semantic(bp: Blueprint, root: Path, show_progress: bool = F
     # If absent, skip JS/TS and emit a structured AnalysisWarning with the fix command.
     new_warnings: List[AnalysisWarning] = list(bp.analysis_warnings)
     _js_langs = {"javascript", "typescript"}
-    if _js_langs & set(lang_files) and not (root / "node_modules").exists():
+    _js_ts_count = sum(len(lang_files[l]) for l in _js_langs if l in lang_files)
+    if _js_ts_count >= 10 and not (root / "node_modules").exists():
         pm_info = detect_js_package_manager(root)
         if pm_info is None or pm_info["required"] == "npm":
             action = "run: npm install"
