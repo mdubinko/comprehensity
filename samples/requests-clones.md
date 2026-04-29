@@ -1,87 +1,20 @@
 # Clone Source Report
 
-Blueprint: `output/tier2/requests/blueprint_semantic_20260425_173207.json`  
+Blueprint: `output/requests-blueprint-semantic.json`  
 Repository: `/Users/micah/.comprehensity/tier2-repos/requests`  
-Clone blocks: 12
+Clone blocks: 7
 
 | Clone | Kind | Lines | Instances |
 |-------|------|------:|----------:|
-| dup_7 | approximate | 15 | 3 |
-| dup_10 | approximate | 12 | 3 |
-| dup_11 | approximate | 10 | 2 |
+| dup_5 | approximate | 12 | 3 |
+| dup_6 | approximate | 10 | 2 |
 | dup_4 | approximate | 9 | 2 |
 | dup_1 | approximate | 8 | 2 |
 | dup_0 | approximate | 7 | 2 |
 | dup_2 | approximate | 7 | 3 |
 | dup_3 | approximate | 7 | 2 |
-| dup_5 | approximate | 6 | 3 |
-| dup_6 | approximate | 6 | 2 |
-| dup_8 | approximate | 6 | 2 |
-| dup_9 | approximate | 5 | 2 |
 
-## dup_7 — approximate, 15 lines, 3 instances
-
-### `tests/test_requests.py` lines 1321–1335
-
-```py
-    def test_cookie_as_dict_keys(self):
-        key = "some_cookie"
-        value = "some_value"
-
-        key1 = "some_cookie1"
-        value1 = "some_value1"
-
-        jar = requests.cookies.RequestsCookieJar()
-        jar.set(key, value)
-        jar.set(key1, value1)
-
-        keys = jar.keys()
-        assert keys == list(keys)
-        # make sure one can use keys multiple times
-        assert list(keys) == list(keys)
-```
-
-### `tests/test_requests.py` lines 1337–1351
-
-```py
-    def test_cookie_as_dict_values(self):
-        key = "some_cookie"
-        value = "some_value"
-
-        key1 = "some_cookie1"
-        value1 = "some_value1"
-
-        jar = requests.cookies.RequestsCookieJar()
-        jar.set(key, value)
-        jar.set(key1, value1)
-
-        values = jar.values()
-        assert values == list(values)
-        # make sure one can use values multiple times
-        assert list(values) == list(values)
-```
-
-### `tests/test_requests.py` lines 1353–1367
-
-```py
-    def test_cookie_as_dict_items(self):
-        key = "some_cookie"
-        value = "some_value"
-
-        key1 = "some_cookie1"
-        value1 = "some_value1"
-
-        jar = requests.cookies.RequestsCookieJar()
-        jar.set(key, value)
-        jar.set(key1, value1)
-
-        items = jar.items()
-        assert items == list(items)
-        # make sure one can use items multiple times
-        assert list(items) == list(items)
-```
-
-## dup_10 — approximate, 12 lines, 3 instances
+## dup_5 — approximate, 12 lines, 3 instances
 
 ### `src/requests/api.py` lines 62–73
 
@@ -136,7 +69,7 @@ def patch(url, data=None, **kwargs):
     return request("patch", url, data=data, **kwargs)
 ```
 
-## dup_11 — approximate, 10 lines, 2 instances
+## dup_6 — approximate, 10 lines, 2 instances
 
 ### `src/requests/api.py` lines 76–85
 
@@ -315,109 +248,4 @@ def delete(url, **kwargs):
             if cookie.path not in paths:
                 paths.append(cookie.path)
         return paths
-```
-
-## dup_5 — approximate, 6 lines, 3 instances
-
-### `tests/test_requests.py` lines 269–274
-
-```py
-    def test_http_301_changes_post_to_get(self, httpbin):
-        r = requests.post(httpbin("status", "301"))
-        assert r.status_code == 200
-        assert r.request.method == "GET"
-        assert r.history[0].status_code == 301
-        assert r.history[0].is_redirect
-```
-
-### `tests/test_requests.py` lines 284–289
-
-```py
-    def test_http_302_changes_post_to_get(self, httpbin):
-        r = requests.post(httpbin("status", "302"))
-        assert r.status_code == 200
-        assert r.request.method == "GET"
-        assert r.history[0].status_code == 302
-        assert r.history[0].is_redirect
-```
-
-### `tests/test_requests.py` lines 298–303
-
-```py
-    def test_http_303_changes_post_to_get(self, httpbin):
-        r = requests.post(httpbin("status", "303"))
-        assert r.status_code == 200
-        assert r.request.method == "GET"
-        assert r.history[0].status_code == 303
-        assert r.history[0].is_redirect
-```
-
-## dup_6 — approximate, 6 lines, 2 instances
-
-### `tests/test_requests.py` lines 291–296
-
-```py
-    def test_http_302_doesnt_change_head_to_get(self, httpbin):
-        r = requests.head(httpbin("status", "302"), allow_redirects=True)
-        assert r.status_code == 200
-        assert r.request.method == "HEAD"
-        assert r.history[0].status_code == 302
-        assert r.history[0].is_redirect
-```
-
-### `tests/test_requests.py` lines 305–310
-
-```py
-    def test_http_303_doesnt_change_head_to_get(self, httpbin):
-        r = requests.head(httpbin("status", "303"), allow_redirects=True)
-        assert r.status_code == 200
-        assert r.request.method == "HEAD"
-        assert r.history[0].status_code == 303
-        assert r.history[0].is_redirect
-```
-
-## dup_8 — approximate, 6 lines, 2 instances
-
-### `tests/test_requests.py` lines 1801–1806
-
-```py
-    def test_header_no_return_chars(self, httpbin, invalid_header):
-        """Ensure that a header containing return character sequences raise an
-        exception. Otherwise, multiple headers are created from single string.
-        """
-        with pytest.raises(InvalidHeader):
-            requests.get(httpbin("get"), headers=invalid_header)
-```
-
-### `tests/test_requests.py` lines 1820–1825
-
-```py
-    def test_header_no_leading_space(self, httpbin, invalid_header):
-        """Ensure headers containing leading whitespace raise
-        InvalidHeader Error before sending.
-        """
-        with pytest.raises(InvalidHeader):
-            requests.get(httpbin("get"), headers=invalid_header)
-```
-
-## dup_9 — approximate, 5 lines, 2 instances
-
-### `tests/test_requests.py` lines 1906–1910
-
-```py
-    def test_should_strip_auth_host_change(self):
-        s = requests.Session()
-        assert s.should_strip_auth(
-            "http://example.com/foo", "http://another.example.com/"
-        )
-```
-
-### `tests/test_requests.py` lines 1935–1939
-
-```py
-    def test_should_strip_auth_port_change(self):
-        s = requests.Session()
-        assert s.should_strip_auth(
-            "http://example.com:1234/foo", "https://example.com:4321/bar"
-        )
 ```

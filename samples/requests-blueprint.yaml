@@ -10,7 +10,7 @@ readme: |-
   Caution: do not hand-edit — \t sequences must remain exact.
 format: comprehensity-blueprint
 version: '1'
-generated_at: '2026-04-27T18:12:42.583121+00:00'
+generated_at: '2026-04-29T19:26:45.905059+00:00'
 summary:
   config_path: /Users/micah/.comprehensity/config.toml
   files: 38
@@ -31,7 +31,7 @@ summary:
   modules: 5
   modules_schema: "level\tname\troot_path\tbuild_kind\tlabel\tinstability\tabstractness\tdistance\tca\tce\t(file_ids: space-joined\
     \ IDs)"
-  clone_blocks: 12
+  clone_blocks: 7
   clone_blocks_schema: "kind\tlines\ttokens\t(instances: space-joined file_id:start-end)"
   modularity_status: complete
   clone_status: complete
@@ -1437,24 +1437,9 @@ clone_blocks:
   clone_info: "approximate\t9\t0"
   instances: f17:732-740 f17:742-750
 - id: dup_5
-  clone_info: "approximate\t6\t0"
-  instances: f31:269-274 f31:284-289 f31:298-303
-- id: dup_6
-  clone_info: "approximate\t6\t0"
-  instances: f31:291-296 f31:305-310
-- id: dup_7
-  clone_info: "approximate\t15\t0"
-  instances: f31:1321-1335 f31:1337-1351 f31:1353-1367
-- id: dup_8
-  clone_info: "approximate\t6\t0"
-  instances: f31:1801-1806 f31:1820-1825
-- id: dup_9
-  clone_info: "approximate\t5\t0"
-  instances: f31:1906-1910 f31:1935-1939
-- id: dup_10
   clone_info: "approximate\t12\t0"
   instances: f9:62-73 f9:118-130 f9:133-145
-- id: dup_11
+- id: dup_6
   clone_info: "approximate\t10\t0"
   instances: f9:76-85 f9:148-157
 modularity_status: complete
