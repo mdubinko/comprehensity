@@ -66,6 +66,7 @@ dev = [
 [project.scripts]
 extract-blueprint = "extract_blueprint:main"
 comprehensity-scan = "phase0:main"
+comprehensity-clonereport = "clonereport:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

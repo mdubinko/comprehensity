@@ -338,7 +338,8 @@ breakdown.
 
 A sample blueprint from the open-source `requests` library (v2.33.1) is provided in
 `samples/requests-blueprint.yaml` for reference. A sample Phase 2 report for the same
-codebase is in `samples/requests-report.md`.
+codebase is in `samples/requests-report.md`. A sample clone source report for the same
+codebase is in `samples/requests-clones.md`.
 
 ### Common errors
 
@@ -473,6 +474,20 @@ To suppress the SARIF file entirely (embed clones in blueprint only):
 extract_blueprint /path/to/project --detect-clones -o blueprint.json \
   --clones-output none
 ```
+
+**Human-readable clone source report.** To see the actual duplicated source for each
+clone block, run `comprehensity-clonereport` against the blueprint. This works immediately
+after `extract_blueprint` — no Phase 2 analysis required:
+
+```bash
+comprehensity-clonereport --blueprint blueprint.json --repo /path/to/project -o clones.md
+```
+
+The output is a markdown file with a summary table (clone id, kind, line count, instance
+count) followed by fenced code snippets for every instance of every clone block, sorted
+largest-first. Use `--repo` to point at the root of the scanned repository — file paths
+in the blueprint are relative, so the report can be generated on any machine that has
+the source checked out.
 
 ---
 

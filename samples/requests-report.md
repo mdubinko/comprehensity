@@ -1,10 +1,10 @@
 # Comprehensity Report
 
-Generated: 2026-04-29 01:58 UTC
+Generated: 2026-04-29 02:55 UTC
 
 ## Architecture Summary
 
-The codebase utilizes a layered architecture centered on an HTTP client core with distinct modules for request structures and testing, allowing agents to perform bounded changes within isolated layers. High separation of concerns between implementation logic, certificate management, and test suites limits the context required for individual module updates. However, duplication levels are above 30 per 100 files, meaning agents will encounter frequent duplicate sites that require synchronized updates to prevent logic divergence.
+This layered architecture, separating core structures from client implementation and test suites, permits bounded changes if agents are provided with relevant core definitions. Responsibilities between transport logic and configuration are distinct, though overlapping module definitions suggest certain edits may require context across multiple directory levels to ensure consistency. Duplication is above 30 per 100 files, meaning agents will encounter frequent duplicate sites when editing shared patterns, increasing the risk of divergent updates.
 
 ## Overview
 
@@ -42,7 +42,7 @@ Sorted by instability descending. **I** = instability (1 → no dependents, 0 �
 | cl8 | HTTP client test suite | 6 | 0 | 21 | 1.000 | 0.000 | 0.000 |
 | cl5 | HTTP client library (13 files) | 13 | 3 | 39 | 0.929 | 0.170 | 0.099 |
 | cl1 | HTTP client library (8 files) | 8 | 3 | 14 | 0.824 | 0.000 | 0.176 |
-| cl7 | HTTP request core structures | 5 | 3 | 12 | 0.800 | 0.118 | 0.082 |
+| cl7 | HTTP client core structures | 5 | 3 | 12 | 0.800 | 0.118 | 0.082 |
 | … | _3 isolated single-file clusters omitted (no import relationships)_ | | | | | | |
 
 ## Top Unstable Modules
@@ -52,7 +52,7 @@ High instability (I → 1) means the cluster imports heavily from others but few
 - **HTTP client test suite** (`cl8`) — I=1.000, 6 files
 - **HTTP client library (13 files)** (`cl5`) — I=0.929, 13 files
 - **HTTP client library (8 files)** (`cl1`) — I=0.824, 8 files
-- **HTTP request core structures** (`cl7`) — I=0.800, 5 files
+- **HTTP client core structures** (`cl7`) — I=0.800, 5 files
 
 ## Clone ROI
 
@@ -67,3 +67,6 @@ Sorted by size (lines) descending — larger clone blocks carry more risk that a
 | dup_0 | 7 | 1.00 |
 | dup_2 | 7 | 1.00 |
 | dup_3 | 7 | 1.00 |
+
+> To see the actual duplicated source for each clone block, run:
+> `comprehensity-clonereport --blueprint path/to/blueprint.json --repo /path/to/repo -o clones.md`
