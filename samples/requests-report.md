@@ -1,10 +1,10 @@
 # Comprehensity Report
 
-Generated: 2026-04-29 19:58 UTC
+Generated: 2026-04-29 23:18 UTC
 
 ## Architecture Summary
 
-The codebase follows a layered architecture that separates core HTTP data structures from the client library and test suites, allowing agents to perform bounded changes within isolated modules. Responsibilities are partitioned between protocol implementation, data definition, and integration utilities like `flask_theme_support`. Duplication levels are above 15 per 100 files, meaning agents will encounter duplicate sites when editing shared patterns, increasing the risk of inconsistent updates across the codebase.
+The codebase follows a layered architecture, transitioning from high-level HTTP interfaces through client libraries to core primitives and a mock server. This separation of concerns allows agents to perform bounded changes within specific layers by isolating interface definitions from implementation details. Because duplication is above 15 per 100 files, agents will encounter duplicate sites when editing shared patterns, requiring coordinated updates across all instances.
 
 ## Overview
 
@@ -49,21 +49,21 @@ Sorted by instability descending. **I** = instability (1 → no dependents, 0 �
 | cl0 | flask_theme_support | 1 | 0 | 2 | 1.000 | 1.000 | 1.000 |
 | cl4 | setup | 1 | 0 | 2 | 1.000 | 0.000 | 0.000 |
 | cl6 | certs | 1 | 0 | 1 | 1.000 | 0.000 | 0.000 |
-| cl8 | HTTP client test suite | 6 | 0 | 21 | 1.000 | 0.000 | 0.000 |
-| cl5 | HTTP client library (13 files) | 13 | 3 | 39 | 0.929 | 0.170 | 0.099 |
-| cl1 | HTTP client library (8 files) | 8 | 3 | 14 | 0.824 | 0.000 | 0.176 |
-| cl7 | Core HTTP data structures | 5 | 3 | 12 | 0.800 | 0.118 | 0.082 |
+| cl8 | Mock HTTP Server | 6 | 0 | 21 | 1.000 | 0.000 | 0.000 |
+| cl5 | High-level HTTP client interface | 13 | 3 | 39 | 0.929 | 0.170 | 0.099 |
+| cl1 | HTTP client library | 8 | 3 | 14 | 0.824 | 0.000 | 0.176 |
+| cl7 | Core HTTP primitives | 5 | 3 | 12 | 0.800 | 0.118 | 0.082 |
 | … | _3 files with no detected dependencies omitted_ | | | | | | |
 
 _3 files (8% of all files) have no detected import relationships to other files in this repo. This may reflect tool/config files, genuinely isolated utilities, or languages with incomplete import extraction._
 
 ## Module Instability
 
-The codebase exhibits a leaf-heavy topology ($I_{avg} = 0.936$) typical of standalone libraries, meaning that while AI agents face a low blast radius from in-repo dependents, they must still trace outgoing dependencies to understand the full context of a change. As no modules exhibit $I < 0.5$, there is no highly stable core present in this subset that would trigger wide-reaching architectural ripples. Consequently, agent change-scoping is highly predictable, as most bounded edits can be contained within a single module and its immediate outbound connections.
+The codebase exhibits a leaf-heavy topology ($I_{avg} = 0.936$) typical of standalone libraries, meaning agents face low blast-radius from in-repo dependents but must trace outgoing dependencies—such as those in `High-level HTTP client interface`—to understand the full context of a change. Because no modules were identified with $I < 0.5$, there are no high-impact stable cores that would trigger widespread architectural ripples during an edit. Consequently, an agent can typically achieve highly predictable change scoping, often requiring only 1–2 modules in active context to execute a bounded task.
 
 ## Clone ROI
 
-The codebase exhibits duplicated production logic within the `src/requests` directory, particularly across API, models, and cookie-handling modules. The most significant risks are concentrated in `src/requests/api.py` and `src/requests/cookies.py`. At a high clone density of 18.4 per 100 files, agents will regularly produce divergent edits across duplicate sites.
+The codebase exhibits production logic duplication within the `src/requests/` module, specifically across `api.py`, `cookies.py`, and `auth.py`. The highest impact risks are found in multi-line blocks within `src/requests/api.py` and recurring patterns in `src/requests/cookies.py`. At a density of 18.4 per 100 files, agents will regularly produce divergent edits across duplicate sites.
 
 **Top clone blocks by size** (test-only blocks excluded):
 
