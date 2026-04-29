@@ -1,10 +1,10 @@
 # Comprehensity Report
 
-Generated: 2026-04-27 18:13 UTC
+Generated: 2026-04-29 01:58 UTC
 
 ## Architecture Summary
 
-The codebase follows a layered architecture centered on core HTTP data structures and a client library, requiring agents to maintain visibility across protocol definitions and implementation modules for bounded changes. Responsibilities are partitioned into distinct domains such as testing and certificate management, yet the shared reliance on core types necessitates broader context for downstream-impacting edits. Duplication is above 30 per 100 files, meaning agents will encounter frequent duplicate sites when editing shared patterns, increasing the risk of divergent updates across the repository.
+The codebase utilizes a layered architecture centered on an HTTP client core with distinct modules for request structures and testing, allowing agents to perform bounded changes within isolated layers. High separation of concerns between implementation logic, certificate management, and test suites limits the context required for individual module updates. However, duplication levels are above 30 per 100 files, meaning agents will encounter frequent duplicate sites that require synchronized updates to prevent logic divergence.
 
 ## Overview
 
@@ -39,37 +39,31 @@ Sorted by instability descending. **I** = instability (1 → no dependents, 0 �
 | cl0 | flask_theme_support | 1 | 0 | 2 | 1.000 | 1.000 | 1.000 |
 | cl4 | setup | 1 | 0 | 2 | 1.000 | 0.000 | 0.000 |
 | cl6 | certs | 1 | 0 | 1 | 1.000 | 0.000 | 0.000 |
-| cl8 | HTTP client testing | 6 | 0 | 21 | 1.000 | 0.000 | 0.000 |
-| cl5 | HTTP client library | 13 | 3 | 39 | 0.929 | 0.170 | 0.099 |
-| cl1 | HTTP client library | 8 | 3 | 14 | 0.824 | 0.000 | 0.176 |
-| cl7 | HTTP core data structures | 5 | 3 | 12 | 0.800 | 0.118 | 0.082 |
-| cl2 | make | 1 | 0 | 0 | — | 0.000 | — |
-| cl3 | pyproject | 1 | 0 | 0 | — | 0.000 | — |
-| cl9 | __init__ | 1 | 0 | 0 | — | 0.000 | — |
+| cl8 | HTTP client test suite | 6 | 0 | 21 | 1.000 | 0.000 | 0.000 |
+| cl5 | HTTP client library (13 files) | 13 | 3 | 39 | 0.929 | 0.170 | 0.099 |
+| cl1 | HTTP client library (8 files) | 8 | 3 | 14 | 0.824 | 0.000 | 0.176 |
+| cl7 | HTTP request core structures | 5 | 3 | 12 | 0.800 | 0.118 | 0.082 |
+| … | _3 isolated single-file clusters omitted (no import relationships)_ | | | | | | |
 
 ## Top Unstable Modules
 
-High instability (I → 1) means a cluster depends on many others but few depend on it. Agents making changes here must understand a large dependency surface, and changes are harder to scope and contain.
+High instability (I → 1) means the cluster imports heavily from others but few clusters depend on it — it sits at the leaf end of the dependency graph. Agents touching these clusters must hold a large incoming dependency surface in context: a change may require tracing through many imported modules to reason about correctness. Trivial single-file clusters with no inbound dependencies are excluded; only clusters that represent meaningful groupings or have real dependents appear here.
 
-- **flask_theme_support** (`cl0`) — I=1.000, 1 file
-- **setup** (`cl4`) — I=1.000, 1 file
-- **certs** (`cl6`) — I=1.000, 1 file
-- **HTTP client testing** (`cl8`) — I=1.000, 6 files
-- **HTTP client library** (`cl5`) — I=0.929, 13 files
+- **HTTP client test suite** (`cl8`) — I=1.000, 6 files
+- **HTTP client library (13 files)** (`cl5`) — I=0.929, 13 files
+- **HTTP client library (8 files)** (`cl1`) — I=0.824, 8 files
+- **HTTP request core structures** (`cl7`) — I=0.800, 5 files
 
 ## Clone ROI
 
-ROI score = lines × dead_fraction. Higher scores mean more deduplication benefit — and higher risk that agents editing one instance will miss others, producing inconsistent changes across the codebase.
+Sorted by size (lines) descending — larger clone blocks carry more risk that an agent editing one instance will miss the others, producing inconsistent changes across the codebase. Clone blocks where every instance is in a test or spec file are excluded. Dead fraction indicates what proportion of the clone's files contain unreferenced symbols; this is informational only and does not affect ranking.
 
-| Clone | Lines | Dead Fraction | ROI Score |
-|-------|------:|--------------:|----------:|
-| dup_4 | 9 | 1.00 | 9.00 |
-| dup_1 | 8 | 1.00 | 8.00 |
-| dup_0 | 7 | 1.00 | 7.00 |
-| dup_2 | 7 | 1.00 | 7.00 |
-| dup_3 | 7 | 1.00 | 7.00 |
-| dup_5 | 6 | 0.00 | 0.00 |
-| dup_6 | 6 | 0.00 | 0.00 |
-| dup_7 | 15 | 0.00 | 0.00 |
-| dup_8 | 6 | 0.00 | 0.00 |
-| dup_9 | 5 | 0.00 | 0.00 |
+| Clone | Lines | Dead Fraction |
+|-------|------:|--------------:|
+| dup_10 | 12 | 0.00 |
+| dup_11 | 10 | 0.00 |
+| dup_4 | 9 | 1.00 |
+| dup_1 | 8 | 1.00 |
+| dup_0 | 7 | 1.00 |
+| dup_2 | 7 | 1.00 |
+| dup_3 | 7 | 1.00 |

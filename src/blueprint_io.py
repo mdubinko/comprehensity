@@ -89,6 +89,12 @@ _LANG_TO_EXTS: Dict[str, frozenset] = {
 # Minimum file count for a language to get its own treepeat run.
 _PRIMARY_CLONE_THRESHOLD = 10
 
+# Directory names that treepeat skips entirely — test code has expected
+# repetition and excluding it meaningfully reduces runtime on large repos.
+_TEST_DIR_NAMES: frozenset = frozenset({
+    "test", "tests", "spec", "specs", "__tests__", "__test__",
+})
+
 
 # ---------------------------------------------------------------------------
 # Build-config file discovery and parsing
@@ -502,12 +508,14 @@ def _run_treepeat_lazy(root_path, ruleset, file_id_map, ignore_dirs=(),
     explicit = tuple(f"**/{d}/**" for d in ignore_dirs if d)
     # Auto-derived: top-level subdirs with no blueprint files
     derived = _treepeat_derived_ignores(Path(root_path), file_id_map)
+    # Test directories: expected repetition, excluded for perf and signal quality
+    test_globs = tuple(f"**/{d}/**" for d in sorted(_TEST_DIR_NAMES))
     # Per-language run: exclude other primary languages' file extensions
     ext_globs = tuple(f"**/*{e}" for e in sorted(exclude_exts))
     # Merge, preserving order; explicit first so they're easy to audit in logs
     seen: set = set()
     ignore_globs = []
-    for g in explicit + derived + ext_globs:
+    for g in explicit + derived + test_globs + ext_globs:
         if g not in seen:
             seen.add(g)
             ignore_globs.append(g)
