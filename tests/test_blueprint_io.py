@@ -6,7 +6,7 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 import clone_detection
-from blueprint import Blueprint, ExternalEntry, FileEntry
+from blueprint import Blueprint, CURRENT_VERSION, ExternalEntry, FileEntry
 from blueprint_io import blueprint_to_sourcegraph, sourcegraph_to_blueprint
 from srcgraph import SourceGraph
 from scan import build_source_graph
@@ -140,7 +140,7 @@ class TestSourcegraphToBlueprint:
     def test_format_and_version_fields(self):
         bp = sourcegraph_to_blueprint(SourceGraph())
         assert bp.format == "comprehensity-blueprint"
-        assert bp.version == "1"
+        assert bp.version == CURRENT_VERSION
 
 
 # ---------------------------------------------------------------------------

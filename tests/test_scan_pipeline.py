@@ -13,7 +13,7 @@ import pytest
 # Ensure src/ is on the path for all imports
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from blueprint import Blueprint
+from blueprint import Blueprint, CURRENT_VERSION
 from blueprint_io import sourcegraph_to_blueprint
 from srcgraph import SourceGraph
 
@@ -95,7 +95,7 @@ class TestScanToBlueprint:
         raw = bp.to_json()
         data = json.loads(raw)
         assert data["format"] == "comprehensity-blueprint"
-        assert data["version"] == "1"
+        assert data["version"] == CURRENT_VERSION
         assert len(data["files"]) == 2
 
         restored = Blueprint.from_json(raw)

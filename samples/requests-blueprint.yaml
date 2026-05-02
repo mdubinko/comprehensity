@@ -9,7 +9,7 @@ readme: |-
   Schemas are listed in summary.*_schema entries.
   Caution: do not hand-edit — \t sequences must remain exact.
 format: comprehensity-blueprint
-version: '1'
+version: '20260502'
 generated_at: '2026-04-29T19:26:45.905059+00:00'
 summary:
   config_path: /Users/micah/.comprehensity/config.toml

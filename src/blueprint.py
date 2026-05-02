@@ -6,10 +6,14 @@ input to analyze_blueprint. Contains no source code — only structural data
 that the client can audit before sharing.
 
 Format identifier : "comprehensity-blueprint"
-Current version   : "1"
+Current version   : "20260502"
 
-Stability guarantee: analyze_blueprint will reject unknown versions with a
-clear upgrade message rather than silently mis-interpreting the data.
+Version history: comprehensity-private/spec/blueprint-changelog.md
+
+Version policy: analyze_blueprint warns on unknown versions but loads anyway.
+Blueprints produced by newer tooling will usually load fine into older readers
+because fields with defaults are backward-compatible. Hard rejection is reserved
+for major structural breaks.
 """
 
 from __future__ import annotations
@@ -21,8 +25,8 @@ from pydantic import BaseModel, Field, model_validator
 
 
 FORMAT_ID = "comprehensity-blueprint"
-CURRENT_VERSION = "1"
-SUPPORTED_VERSIONS = {"1"}
+CURRENT_VERSION = "20260502"
+SUPPORTED_VERSIONS = {"20260502"}
 
 
 # ---------------------------------------------------------------------------
@@ -313,12 +317,19 @@ class CloneBlock(BaseModel):
       "approximate" — additionally anonymizes identifiers and constants
                       (treepeat ruleset: loose)
       "semantic"    — reserved for future semantic / embedding-based detection
+
+    circle / dantes — CPHA severity classification (Seven Circles of Copy-Paste Hell).
+      circle : 1 (Conjured/harmless) … 7 (Endemic/codebase-corrupting); default 1.
+      dantes : weighted severity score for this block; sum across all blocks then
+               divide by total_files to get the dantes_per_file headline metric.
     """
     id: str                         # "dup_0", "dup_1", ...
     kind: Literal["exact", "normalized", "approximate", "semantic", "boilerplate"] = "exact"
     instances: List[CloneInstance] = Field(min_length=2)
     lines: int = Field(ge=1)
     tokens: int = Field(ge=0)
+    circle: Literal[1, 2, 3, 4, 5, 6, 7] = 1
+    dantes: float = Field(ge=0.0, default=0.0)
 
 
 # ---------------------------------------------------------------------------
@@ -439,7 +450,7 @@ class Blueprint(BaseModel):
     This lets clients audit provenance and scope before reading large arrays.
     """
     format: Literal["comprehensity-blueprint"] = FORMAT_ID
-    version: Literal["1"] = CURRENT_VERSION
+    version: Literal["20260502"] = CURRENT_VERSION
     generated_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc)
     )
@@ -605,15 +616,22 @@ class Blueprint(BaseModel):
 
     @classmethod
     def from_json(cls, raw: str) -> Blueprint:
-        """Deserialize from JSON string with version check."""
+        """Deserialize from JSON string with version check.
+
+        Unknown versions produce a warning but load anyway — fields with
+        defaults are backward-compatible across minor schema additions.
+        """
         import json
+        import warnings
         data = json.loads(raw)
         version = data.get("version", "<missing>")
         if version not in SUPPORTED_VERSIONS:
-            raise ValueError(
-                f"Blueprint version {version!r} is not supported by this "
-                f"installation (supported: {sorted(SUPPORTED_VERSIONS)}). "
-                f"Update comprehensity and try again."
+            warnings.warn(
+                f"Blueprint version {version!r} is not in the known set "
+                f"{sorted(SUPPORTED_VERSIONS)}; loading anyway. "
+                f"Some fields may be missing or ignored.",
+                UserWarning,
+                stacklevel=2,
             )
         return cls.model_validate(data)
 
