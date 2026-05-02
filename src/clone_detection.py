@@ -253,6 +253,7 @@ def run_treepeat(
         "-f", "sarif",
         "--min-lines", str(min_lines),
         "--verbose",        # per-language timing, ignored nodes, node types
+        "--ignore-files", "",   # don't load repo .gitignore/.dockerignore; comprehensity owns ignore logic
     ]
     if ignore_patterns:
         cmd += ["--ignore", ",".join(ignore_patterns)]
