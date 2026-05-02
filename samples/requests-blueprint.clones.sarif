@@ -1,0 +1,543 @@
+{
+  "version": "2.1.0",
+  "schema_uri": "https://json.schemastore.org/sarif-2.1.0.json",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "treepeat",
+          "version": "0.0.1",
+          "semantic_version": "0.0.1",
+          "information_uri": "https://github.com/dsummersl/treepeat",
+          "rules": [
+            {
+              "id": "similar-code",
+              "name": "SimilarCode",
+              "short_description": {
+                "text": "Structurally similar code detected"
+              },
+              "full_description": {
+                "text": "This rule identifies code blocks that are structurally similar based on Abstract Syntax Tree (AST) analysis using MinHash and Locality-Sensitive Hashing (LSH). Similar code may indicate opportunities for refactoring or potential code duplication issues."
+              },
+              "default_configuration": {
+                "enabled": true,
+                "level": "warning"
+              },
+              "help": {
+                "text": "Consider refactoring similar code blocks into shared functions or modules to improve maintainability and reduce duplication."
+              },
+              "properties": {
+                "tags": [
+                  "maintainability",
+                  "code-duplication",
+                  "refactoring"
+                ],
+                "precision": "high"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "rule_id": "similar-code",
+          "level": "error",
+          "message": {
+            "text": "Code similarity detected (100.0% similar, 2 regions). /Users/micah/.comprehensity/tier2-repos/requests/src/requests/cookies.py:225-232 (8 lines). /Users/micah/.comprehensity/tier2-repos/requests/src/requests/cookies.py:242-249 (8 lines)"
+          },
+          "locations": [
+            {
+              "physical_location": {
+                "artifact_location": {
+                  "uri": "/Users/micah/.comprehensity/tier2-repos/requests/src/requests/cookies.py",
+                  "uri_base_id": "%SRCROOT%"
+                },
+                "region": {
+                  "start_line": 225,
+                  "start_column": 1,
+                  "end_line": 232
+                }
+              }
+            }
+          ],
+          "related_locations": [
+            {
+              "id": 1,
+              "physical_location": {
+                "artifact_location": {
+                  "uri": "/Users/micah/.comprehensity/tier2-repos/requests/src/requests/cookies.py",
+                  "uri_base_id": "%SRCROOT%"
+                },
+                "region": {
+                  "start_line": 242,
+                  "start_column": 1,
+                  "end_line": 249
+                }
+              },
+              "message": {
+                "text": "Similar code block (100.0% match)"
+              }
+            }
+          ],
+          "properties": {
+            "similarity": 1.0,
+            "similarityPercent": 100.0,
+            "groupSize": 2,
+            "regions": [
+              {
+                "path": "/Users/micah/.comprehensity/tier2-repos/requests/src/requests/cookies.py",
+                "startLine": 225,
+                "endLine": 232,
+                "lines": 8,
+                "type": "function_definition",
+                "name": "iterkeys"
+              },
+              {
+                "path": "/Users/micah/.comprehensity/tier2-repos/requests/src/requests/cookies.py",
+                "startLine": 242,
+                "endLine": 249,
+                "lines": 8,
+                "type": "function_definition",
+                "name": "itervalues"
+              }
+            ]
+          }
+        },
+        {
+          "rule_id": "similar-code",
+          "level": "error",
+          "message": {
+            "text": "Code similarity detected (100.0% similar, 3 regions). /Users/micah/.comprehensity/tier2-repos/requests/src/requests/cookies.py:234-240 (7 lines). /Users/micah/.comprehensity/tier2-repos/requests/src/requests/cookies.py:268-275 (8 lines). /Users/micah/.comprehensity/tier2-repos/requests/src/requests/cookies.py:251-257 (7 lines)"
+          },
+          "locations": [
+            {
+              "physical_location": {
+                "artifact_location": {
+                  "uri": "/Users/micah/.comprehensity/tier2-repos/requests/src/requests/cookies.py",
+                  "uri_base_id": "%SRCROOT%"
+                },
+                "region": {
+                  "start_line": 234,
+                  "start_column": 1,
+                  "end_line": 240
+                }
+              }
+            }
+          ],
+          "related_locations": [
+            {
+              "id": 1,
+              "physical_location": {
+                "artifact_location": {
+                  "uri": "/Users/micah/.comprehensity/tier2-repos/requests/src/requests/cookies.py",
+                  "uri_base_id": "%SRCROOT%"
+                },
+                "region": {
+                  "start_line": 268,
+                  "start_column": 1,
+                  "end_line": 275
+                }
+              },
+              "message": {
+                "text": "Similar code block (100.0% match)"
+              }
+            },
+            {
+              "id": 2,
+              "physical_location": {
+                "artifact_location": {
+                  "uri": "/Users/micah/.comprehensity/tier2-repos/requests/src/requests/cookies.py",
+                  "uri_base_id": "%SRCROOT%"
+                },
+                "region": {
+                  "start_line": 251,
+                  "start_column": 1,
+                  "end_line": 257
+                }
+              },
+              "message": {
+                "text": "Similar code block (100.0% match)"
+              }
+            }
+          ],
+          "properties": {
+            "similarity": 1.0,
+            "similarityPercent": 100.0,
+            "groupSize": 3,
+            "regions": [
+              {
+                "path": "/Users/micah/.comprehensity/tier2-repos/requests/src/requests/cookies.py",
+                "startLine": 234,
+                "endLine": 240,
+                "lines": 7,
+                "type": "function_definition",
+                "name": "keys"
+              },
+              {
+                "path": "/Users/micah/.comprehensity/tier2-repos/requests/src/requests/cookies.py",
+                "startLine": 268,
+                "endLine": 275,
+                "lines": 8,
+                "type": "function_definition",
+                "name": "items"
+              },
+              {
+                "path": "/Users/micah/.comprehensity/tier2-repos/requests/src/requests/cookies.py",
+                "startLine": 251,
+                "endLine": 257,
+                "lines": 7,
+                "type": "function_definition",
+                "name": "values"
+              }
+            ]
+          }
+        },
+        {
+          "rule_id": "similar-code",
+          "level": "error",
+          "message": {
+            "text": "Code similarity detected (100.0% similar, 2 regions). /Users/micah/.comprehensity/tier2-repos/requests/src/requests/cookies.py:277-283 (7 lines). /Users/micah/.comprehensity/tier2-repos/requests/src/requests/cookies.py:285-291 (7 lines)"
+          },
+          "locations": [
+            {
+              "physical_location": {
+                "artifact_location": {
+                  "uri": "/Users/micah/.comprehensity/tier2-repos/requests/src/requests/cookies.py",
+                  "uri_base_id": "%SRCROOT%"
+                },
+                "region": {
+                  "start_line": 277,
+                  "start_column": 1,
+                  "end_line": 283
+                }
+              }
+            }
+          ],
+          "related_locations": [
+            {
+              "id": 1,
+              "physical_location": {
+                "artifact_location": {
+                  "uri": "/Users/micah/.comprehensity/tier2-repos/requests/src/requests/cookies.py",
+                  "uri_base_id": "%SRCROOT%"
+                },
+                "region": {
+                  "start_line": 285,
+                  "start_column": 1,
+                  "end_line": 291
+                }
+              },
+              "message": {
+                "text": "Similar code block (100.0% match)"
+              }
+            }
+          ],
+          "properties": {
+            "similarity": 1.0,
+            "similarityPercent": 100.0,
+            "groupSize": 2,
+            "regions": [
+              {
+                "path": "/Users/micah/.comprehensity/tier2-repos/requests/src/requests/cookies.py",
+                "startLine": 277,
+                "endLine": 283,
+                "lines": 7,
+                "type": "function_definition",
+                "name": "list_domains"
+              },
+              {
+                "path": "/Users/micah/.comprehensity/tier2-repos/requests/src/requests/cookies.py",
+                "startLine": 285,
+                "endLine": 291,
+                "lines": 7,
+                "type": "function_definition",
+                "name": "list_paths"
+              }
+            ]
+          }
+        },
+        {
+          "rule_id": "similar-code",
+          "level": "error",
+          "message": {
+            "text": "Code similarity detected (100.0% similar, 2 regions). /Users/micah/.comprehensity/tier2-repos/requests/src/requests/auth.py:83-89 (7 lines). /Users/micah/.comprehensity/tier2-repos/requests/src/requests/auth.py:305-311 (7 lines)"
+          },
+          "locations": [
+            {
+              "physical_location": {
+                "artifact_location": {
+                  "uri": "/Users/micah/.comprehensity/tier2-repos/requests/src/requests/auth.py",
+                  "uri_base_id": "%SRCROOT%"
+                },
+                "region": {
+                  "start_line": 83,
+                  "start_column": 1,
+                  "end_line": 89
+                }
+              }
+            }
+          ],
+          "related_locations": [
+            {
+              "id": 1,
+              "physical_location": {
+                "artifact_location": {
+                  "uri": "/Users/micah/.comprehensity/tier2-repos/requests/src/requests/auth.py",
+                  "uri_base_id": "%SRCROOT%"
+                },
+                "region": {
+                  "start_line": 305,
+                  "start_column": 1,
+                  "end_line": 311
+                }
+              },
+              "message": {
+                "text": "Similar code block (100.0% match)"
+              }
+            }
+          ],
+          "properties": {
+            "similarity": 1.0,
+            "similarityPercent": 100.0,
+            "groupSize": 2,
+            "regions": [
+              {
+                "path": "/Users/micah/.comprehensity/tier2-repos/requests/src/requests/auth.py",
+                "startLine": 83,
+                "endLine": 89,
+                "lines": 7,
+                "type": "function_definition",
+                "name": "__eq__"
+              },
+              {
+                "path": "/Users/micah/.comprehensity/tier2-repos/requests/src/requests/auth.py",
+                "startLine": 305,
+                "endLine": 311,
+                "lines": 7,
+                "type": "function_definition",
+                "name": "__eq__"
+              }
+            ]
+          }
+        },
+        {
+          "rule_id": "similar-code",
+          "level": "error",
+          "message": {
+            "text": "Code similarity detected (100.0% similar, 2 regions). /Users/micah/.comprehensity/tier2-repos/requests/src/requests/models.py:732-740 (9 lines). /Users/micah/.comprehensity/tier2-repos/requests/src/requests/models.py:742-750 (9 lines)"
+          },
+          "locations": [
+            {
+              "physical_location": {
+                "artifact_location": {
+                  "uri": "/Users/micah/.comprehensity/tier2-repos/requests/src/requests/models.py",
+                  "uri_base_id": "%SRCROOT%"
+                },
+                "region": {
+                  "start_line": 732,
+                  "start_column": 1,
+                  "end_line": 740
+                }
+              }
+            }
+          ],
+          "related_locations": [
+            {
+              "id": 1,
+              "physical_location": {
+                "artifact_location": {
+                  "uri": "/Users/micah/.comprehensity/tier2-repos/requests/src/requests/models.py",
+                  "uri_base_id": "%SRCROOT%"
+                },
+                "region": {
+                  "start_line": 742,
+                  "start_column": 1,
+                  "end_line": 750
+                }
+              },
+              "message": {
+                "text": "Similar code block (100.0% match)"
+              }
+            }
+          ],
+          "properties": {
+            "similarity": 1.0,
+            "similarityPercent": 100.0,
+            "groupSize": 2,
+            "regions": [
+              {
+                "path": "/Users/micah/.comprehensity/tier2-repos/requests/src/requests/models.py",
+                "startLine": 732,
+                "endLine": 740,
+                "lines": 9,
+                "type": "function_definition",
+                "name": "__bool__"
+              },
+              {
+                "path": "/Users/micah/.comprehensity/tier2-repos/requests/src/requests/models.py",
+                "startLine": 742,
+                "endLine": 750,
+                "lines": 9,
+                "type": "function_definition",
+                "name": "__nonzero__"
+              }
+            ]
+          }
+        },
+        {
+          "rule_id": "similar-code",
+          "level": "error",
+          "message": {
+            "text": "Code similarity detected (100.0% similar, 3 regions). /Users/micah/.comprehensity/tier2-repos/requests/src/requests/api.py:62-73 (12 lines). /Users/micah/.comprehensity/tier2-repos/requests/src/requests/api.py:133-145 (13 lines). /Users/micah/.comprehensity/tier2-repos/requests/src/requests/api.py:118-130 (13 lines)"
+          },
+          "locations": [
+            {
+              "physical_location": {
+                "artifact_location": {
+                  "uri": "/Users/micah/.comprehensity/tier2-repos/requests/src/requests/api.py",
+                  "uri_base_id": "%SRCROOT%"
+                },
+                "region": {
+                  "start_line": 62,
+                  "start_column": 1,
+                  "end_line": 73
+                }
+              }
+            }
+          ],
+          "related_locations": [
+            {
+              "id": 1,
+              "physical_location": {
+                "artifact_location": {
+                  "uri": "/Users/micah/.comprehensity/tier2-repos/requests/src/requests/api.py",
+                  "uri_base_id": "%SRCROOT%"
+                },
+                "region": {
+                  "start_line": 133,
+                  "start_column": 1,
+                  "end_line": 145
+                }
+              },
+              "message": {
+                "text": "Similar code block (100.0% match)"
+              }
+            },
+            {
+              "id": 2,
+              "physical_location": {
+                "artifact_location": {
+                  "uri": "/Users/micah/.comprehensity/tier2-repos/requests/src/requests/api.py",
+                  "uri_base_id": "%SRCROOT%"
+                },
+                "region": {
+                  "start_line": 118,
+                  "start_column": 1,
+                  "end_line": 130
+                }
+              },
+              "message": {
+                "text": "Similar code block (100.0% match)"
+              }
+            }
+          ],
+          "properties": {
+            "similarity": 1.0,
+            "similarityPercent": 100.0,
+            "groupSize": 3,
+            "regions": [
+              {
+                "path": "/Users/micah/.comprehensity/tier2-repos/requests/src/requests/api.py",
+                "startLine": 62,
+                "endLine": 73,
+                "lines": 12,
+                "type": "function_definition",
+                "name": "get"
+              },
+              {
+                "path": "/Users/micah/.comprehensity/tier2-repos/requests/src/requests/api.py",
+                "startLine": 133,
+                "endLine": 145,
+                "lines": 13,
+                "type": "function_definition",
+                "name": "patch"
+              },
+              {
+                "path": "/Users/micah/.comprehensity/tier2-repos/requests/src/requests/api.py",
+                "startLine": 118,
+                "endLine": 130,
+                "lines": 13,
+                "type": "function_definition",
+                "name": "put"
+              }
+            ]
+          }
+        },
+        {
+          "rule_id": "similar-code",
+          "level": "error",
+          "message": {
+            "text": "Code similarity detected (100.0% similar, 2 regions). /Users/micah/.comprehensity/tier2-repos/requests/src/requests/api.py:76-85 (10 lines). /Users/micah/.comprehensity/tier2-repos/requests/src/requests/api.py:148-157 (10 lines)"
+          },
+          "locations": [
+            {
+              "physical_location": {
+                "artifact_location": {
+                  "uri": "/Users/micah/.comprehensity/tier2-repos/requests/src/requests/api.py",
+                  "uri_base_id": "%SRCROOT%"
+                },
+                "region": {
+                  "start_line": 76,
+                  "start_column": 1,
+                  "end_line": 85
+                }
+              }
+            }
+          ],
+          "related_locations": [
+            {
+              "id": 1,
+              "physical_location": {
+                "artifact_location": {
+                  "uri": "/Users/micah/.comprehensity/tier2-repos/requests/src/requests/api.py",
+                  "uri_base_id": "%SRCROOT%"
+                },
+                "region": {
+                  "start_line": 148,
+                  "start_column": 1,
+                  "end_line": 157
+                }
+              },
+              "message": {
+                "text": "Similar code block (100.0% match)"
+              }
+            }
+          ],
+          "properties": {
+            "similarity": 1.0,
+            "similarityPercent": 100.0,
+            "groupSize": 2,
+            "regions": [
+              {
+                "path": "/Users/micah/.comprehensity/tier2-repos/requests/src/requests/api.py",
+                "startLine": 76,
+                "endLine": 85,
+                "lines": 10,
+                "type": "function_definition",
+                "name": "options"
+              },
+              {
+                "path": "/Users/micah/.comprehensity/tier2-repos/requests/src/requests/api.py",
+                "startLine": 148,
+                "endLine": 157,
+                "lines": 10,
+                "type": "function_definition",
+                "name": "delete"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

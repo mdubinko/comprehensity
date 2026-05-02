@@ -9,6 +9,7 @@ writes SARIF to a temp file, calls sarif_to_clone_blocks, and cleans up.
 
 import hashlib
 import json
+import math
 import os
 import re
 import shutil
@@ -73,6 +74,161 @@ _JAVA_BOILERPLATE_RE = re.compile(
     r"|^setUp$|^tearDown$"          # test lifecycle
 )
 
+
+# ---------------------------------------------------------------------------
+# CPHA severity classification — Seven Circles of Copy-Paste Hell
+# ---------------------------------------------------------------------------
+
+_CIRCLE_TEST_DIRS: frozenset = frozenset({
+    "test", "tests", "spec", "specs", "__tests__", "__test__",
+    "migration", "migrations", "bench", "benchmark", "benchmarks",
+    "generated", "__generated__", "fixtures",
+})
+
+_CIRCLE_VENDOR_DIRS: frozenset = frozenset({
+    "vendor", "_vendor", "third_party", "third-party", "extern", "internal",
+})
+
+
+def _levenshtein(a: str, b: str) -> int:
+    """Levenshtein edit distance between two strings."""
+    if a == b:
+        return 0
+    if not a:
+        return len(b)
+    if not b:
+        return len(a)
+    dp = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        prev, dp[0] = dp[0], i
+        for j, cb in enumerate(b, 1):
+            temp = dp[j]
+            dp[j] = prev if ca == cb else 1 + min(prev, dp[j - 1], dp[j])
+            prev = temp
+    return dp[-1]
+
+
+def _longest_common_dir_prefix(paths: List[str]) -> str:
+    """Return the common directory prefix shared by all paths."""
+    if not paths:
+        return ""
+    parts_list = [p.replace("\\", "/").split("/") for p in paths]
+    common: List[str] = []
+    for level in zip(*parts_list):
+        if len(set(level)) == 1:
+            common.append(level[0])
+        else:
+            break
+    # Drop the last component if it looks like a filename (has a dot)
+    while common and "." in common[-1]:
+        common.pop()
+    return "/".join(common)
+
+
+def _path_parts(p: str) -> List[str]:
+    return p.replace("\\", "/").split("/")
+
+
+def _module_dir(p: str, common_prefix: str) -> str:
+    """First path component after stripping the common prefix."""
+    rel = p
+    if common_prefix and p.startswith(common_prefix + "/"):
+        rel = p[len(common_prefix) + 1:]
+    return rel.replace("\\", "/").split("/")[0]
+
+
+def classify_circle(rel_paths: List[str], span: int) -> Tuple[int, float]:
+    """Return (circle, dantes) for a clone block.
+
+    rel_paths : project-relative file paths for each instance (may have duplicates)
+    span      : number of lines in one instance
+
+    See docs/cpha-taxonomy.md in comprehensity-private for the full specification,
+    score-weight formulas, calibration targets, and rationale for each rule.
+
+    Classification priority (first match wins):
+      1  test/spec/generated/bench dir → Circle I
+      2  all same file + span < 5L     → Circle I
+      3  vendor/internal dir           → Circle III
+      4  all same file                 → Circle II
+      5  2 sister subtrees, edit≤3, same filename, depth≥1  → Circle V
+      6  all parent dirs pairwise edit≤2  → Circle IV
+      7  span≥30 + count≥5 + cross-module → Circle VII
+      8  cross-module + span≥15           → Circle VI
+      9  default                          → Circle I
+    """
+    count = len(rel_paths)
+    unique_files = set(rel_paths)
+
+    # Rule 1: any instance in test/generated/bench dir → Circle I
+    for p in rel_paths:
+        parts = _path_parts(p)
+        if any(part in _CIRCLE_TEST_DIRS for part in parts[:-1]):
+            return 1, 0.0
+
+    # Rule 2: all in same file + short → Circle I
+    if len(unique_files) == 1 and span < 5:
+        return 1, 0.0
+
+    # Rule 3: any instance in vendor/internal dir → Circle III
+    for p in rel_paths:
+        parts = _path_parts(p)
+        if any(part in _CIRCLE_VENDOR_DIRS for part in parts[:-1]):
+            return 3, 0.15
+
+    # Rule 4: all in same file → Circle II
+    if len(unique_files) == 1:
+        return 2, round(0.05 * count, 4)
+
+    # Compute module dirs relative to the common prefix
+    unique_list = list(unique_files)
+    common_pfx = _longest_common_dir_prefix(unique_list)
+    module_dirs = {_module_dir(p, common_pfx) for p in rel_paths}
+    is_cross_module = len(module_dirs) > 1
+
+    # Rule 5: exactly 2 sister subtrees with similar names → Circle V (fork)
+    # Requires files to be *nested* inside the module dirs (depth ≥ 1), not
+    # directly in them — this distinguishes a fork from simple sibling adapters.
+    if is_cross_module and len(module_dirs) == 2:
+        md = list(module_dirs)
+        if _levenshtein(md[0], md[1]) <= 3:
+            basenames = {_path_parts(p)[-1] for p in rel_paths}
+            if len(basenames) == 1:
+                pfx0 = (common_pfx + "/" if common_pfx else "") + md[0] + "/"
+                max_depth = max(
+                    len(p[len(pfx0):].replace("\\", "/").split("/")) - 1
+                    if p.startswith(pfx0) else 0
+                    for p in rel_paths
+                )
+                if max_depth >= 1:
+                    return 5, 0.6
+
+    # Rule 6: sibling dirs with all pairwise name similarity ≤ 2 → Circle IV
+    parent_dirs = {"/".join(_path_parts(p)[:-1]) for p in rel_paths}
+    if len(parent_dirs) >= 2:
+        pd_names = [pd.split("/")[-1] for pd in parent_dirs]
+        all_close = all(
+            _levenshtein(pd_names[i], pd_names[j]) <= 2
+            for i in range(len(pd_names))
+            for j in range(i + 1, len(pd_names))
+        )
+        if all_close:
+            pairs = count * (count - 1) / 2
+            return 4, round(0.3 * pairs, 4)
+
+    # Rule 7: endemic — many cross-module instances of large blocks → Circle VII
+    if span >= 30 and count >= 5 and is_cross_module:
+        return 7, round(1.0 * count * math.log2(max(span, 2)), 4)
+
+    # Rule 8: scattered cross-module duplication → Circle VI
+    if is_cross_module and span >= 15:
+        return 6, round(0.7 * count, 4)
+
+    # Rule 9: default conservative
+    return 1, 0.0
+
+
+# ---------------------------------------------------------------------------
 
 def _hash_region(path: str, start_line: int, end_line: int) -> str:
     """SHA-256 of the normalized content of a file region.
@@ -167,21 +323,28 @@ def sarif_to_clone_blocks(
                 else base_kind
             )
 
+            rel_paths = [fid for fid, _ in resolved]
             sort_key = (first_file_id, first_region["startLine"])
-            pending.append((sort_key, instances, regions[0]["lines"], block_kind))
+            pending.append((sort_key, instances, regions[0]["lines"], block_kind, rel_paths))
 
     pending.sort(key=lambda x: x[0])
 
-    return [
-        CloneBlock(
+    blocks = []
+    for i, (_, instances, lines, block_kind, rel_paths) in enumerate(pending):
+        if block_kind == "boilerplate":
+            circle, dantes = 1, 0.0
+        else:
+            circle, dantes = classify_circle(rel_paths, lines)
+        blocks.append(CloneBlock(
             id=f"dup_{i}",
             kind=block_kind,
             instances=instances,
             lines=lines,
             tokens=0,
-        )
-        for i, (_, instances, lines, block_kind) in enumerate(pending)
-    ]
+            circle=circle,
+            dantes=dantes,
+        ))
+    return blocks
 
 
 def _kill_proc_group(proc: subprocess.Popen) -> None:

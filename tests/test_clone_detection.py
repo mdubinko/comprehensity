@@ -17,6 +17,7 @@ import clone_detection
 from clone_detection import (
     RULESET_TO_KIND,
     CloneDetectionUnavailable,
+    classify_circle,
     run_treepeat,
     sarif_to_clone_blocks,
 )
@@ -29,6 +30,36 @@ FIXTURE_DIR = Path(__file__).parent / "fixtures" / "clone"
 PATH_A = str(FIXTURE_DIR / "a.py")
 PATH_B = str(FIXTURE_DIR / "b.py")
 PATH_C = str(FIXTURE_DIR / "c.py")
+
+# CPHA fixture paths — relative strings as classify_circle expects
+CPHA_DIR = Path(__file__).parent / "fixtures" / "cpha"
+# Circle I
+CPHA_I_TEST      = "src/test/java/org/example/ServiceTest.java"
+CPHA_I_GENERATED = "src/generated/org/example/UserProto.java"
+CPHA_I_MAIN      = "src/main/java/org/example/UserService.java"
+# Circle II
+CPHA_II_FILE     = "src/main/java/org/example/UserService.java"
+# Circle III
+CPHA_III_MAIN    = "src/main/java/org/example/util/FastMath.java"
+CPHA_III_VENDOR  = "vendor/org/apache/lucene/util/FastMath.java"
+# Circle IV
+CPHA_IV_RX2      = "adapters/rxjava2/src/RxJava2CallAdapter.java"
+CPHA_IV_RX3      = "adapters/rxjava3/src/RxJava3CallAdapter.java"
+# Circle V
+CPHA_V_ESQL      = "plugin/esql/src/main/java/org/example/parser/AstBuilder.java"
+CPHA_V_QL        = "plugin/ql/src/main/java/org/example/parser/AstBuilder.java"
+# Circle VI
+CPHA_VI_INSTANCE = "airflow/models/TaskInstance.java"
+CPHA_VI_COMMAND  = "airflow/cli/commands/TaskCommand.java"
+# Circle VII
+CPHA_VII_PRINTERS = [
+    "printing/FCodePrinter.java",
+    "printing/CCodePrinter.java",
+    "printing/JsCodePrinter.java",
+    "printing/FortranCodePrinter.java",
+    "printing/RCodePrinter.java",
+    "printing/JuliaPrinter.java",
+]
 
 FILE_ID_MAP = {
     PATH_A: "src/a.py",
@@ -517,6 +548,249 @@ class TestBoilerplateFilter:
         blocks = self._write_and_parse(tmp_path, "hashCode", "hashCode",
                                        ruleset="none")
         assert blocks[0].kind == "boilerplate"
+
+
+# ---------------------------------------------------------------------------
+# classify_circle — CPHA Seven Circles classification
+# ---------------------------------------------------------------------------
+
+class TestClassifyCircle:
+    """Unit tests for classify_circle(rel_paths, span) -> (circle, dantes)."""
+
+    # Rule 1 — test/generated dirs → Circle I
+    def test_test_dir_instance_circle_i(self):
+        assert classify_circle(["tests/a.py", "src/b.py"], span=20)[0] == 1
+
+    def test_spec_dir_circle_i(self):
+        assert classify_circle(["spec/a.py", "src/b.py"], span=20)[0] == 1
+
+    def test_generated_dir_circle_i(self):
+        assert classify_circle(["generated/a.py", "src/b.py"], span=20)[0] == 1
+
+    def test_nested_test_dir_circle_i(self):
+        assert classify_circle(["src/tests/helpers/a.py", "src/b.py"], span=20)[0] == 1
+
+    # Rule 2 — same file + short span → Circle I
+    def test_same_file_short_span_circle_i(self):
+        assert classify_circle(["src/a.py", "src/a.py"], span=3)[0] == 1
+
+    def test_same_file_span_4_still_circle_i(self):
+        assert classify_circle(["src/a.py", "src/a.py"], span=4)[0] == 1
+
+    # Rule 3 — vendor/internal dirs → Circle III
+    def test_vendor_dir_circle_iii(self):
+        circle, dantes = classify_circle(["vendor/lib/a.py", "src/b.py"], span=10)
+        assert circle == 3
+        assert dantes == 0.15
+
+    def test_internal_dir_circle_iii(self):
+        assert classify_circle(["internal/util.py", "cmd/main.py"], span=10)[0] == 3
+
+    # Rule 4 — all same file + long span → Circle II
+    def test_same_file_long_span_circle_ii(self):
+        circle, dantes = classify_circle(["src/a.py", "src/a.py"], span=10)
+        assert circle == 2
+        assert dantes == round(0.05 * 2, 4)
+
+    def test_intrafile_3_instances(self):
+        circle, dantes = classify_circle(["src/a.py", "src/a.py", "src/a.py"], span=8)
+        assert circle == 2
+        assert dantes == round(0.05 * 3, 4)
+
+    # Rule 5 — sister subtrees with same filename → Circle V (fork)
+    def test_fork_sister_dirs_circle_v(self):
+        # esql/src/Foo.java and ql/src/Foo.java — edit("esql","ql")=2, same basename
+        circle, dantes = classify_circle(
+            ["x-pack/plugin/esql/src/Foo.java", "x-pack/plugin/ql/src/Foo.java"],
+            span=40,
+        )
+        assert circle == 5
+        assert dantes == 0.6
+
+    # Rule 6 — sibling parent dirs with edit distance ≤ 2 → Circle IV
+    def test_sibling_dirs_circle_iv(self):
+        circle, dantes = classify_circle(
+            ["adapters/rxjava2/Adapter.java", "adapters/rxjava3/Adapter.java"],
+            span=20,
+        )
+        assert circle == 4
+        assert dantes == round(0.3 * 1, 4)  # 2 instances = 1 pair
+
+    def test_sibling_dirs_3_instances_circle_iv(self):
+        circle, dantes = classify_circle(
+            ["lib/v1/util.py", "lib/v2/util.py", "lib/v3/util.py"],
+            span=10,
+        )
+        assert circle == 4
+        assert dantes == round(0.3 * 3, 4)  # 3 instances = 3 pairs
+
+    # Rule 7 — large + many + cross-module → Circle VII (endemic)
+    def test_endemic_circle_vii(self):
+        # Sympy-style: distinctly-named printer backends, 6 instances, span=35
+        paths = [
+            "sympy/printing/fcode.py",
+            "sympy/printing/ccode.py",
+            "sympy/printing/jscode.py",
+            "sympy/printing/fortrancode.py",
+            "sympy/printing/rcode.py",
+            "sympy/printing/julia.py",
+        ]
+        circle, dantes = classify_circle(paths, span=35)
+        assert circle == 7
+        import math
+        assert dantes == round(1.0 * 6 * math.log2(35), 4)
+
+    def test_endemic_requires_count_5(self):
+        # Only 4 instances — should NOT be Circle VII
+        paths = [
+            "sympy/printing/fcode.py",
+            "sympy/printing/ccode.py",
+            "sympy/printing/jscode.py",
+            "sympy/printing/fortrancode.py",
+        ]
+        circle = classify_circle(paths, span=35)[0]
+        assert circle != 7
+
+    def test_endemic_requires_span_30(self):
+        paths = [
+            "sympy/printing/fcode.py",
+            "sympy/printing/ccode.py",
+            "sympy/printing/jscode.py",
+            "sympy/printing/fortrancode.py",
+            "sympy/printing/rcode.py",
+            "sympy/printing/julia.py",
+        ]
+        circle = classify_circle(paths, span=29)[0]
+        assert circle != 7
+
+    # Rule 8 — cross-module + span ≥ 15 → Circle VI (scattered)
+    def test_scattered_circle_vi(self):
+        circle, dantes = classify_circle(["app/task.py", "core/worker.py"], span=20)
+        assert circle == 6
+        assert dantes == round(0.7 * 2, 4)
+
+    def test_scattered_requires_span_15(self):
+        # span=14, cross-module → should default to Circle I
+        circle = classify_circle(["app/a.py", "core/b.py"], span=14)[0]
+        assert circle == 1
+
+    # Rule 9 — default → Circle I
+    def test_default_short_cross_module(self):
+        circle = classify_circle(["app/a.py", "core/b.py"], span=5)[0]
+        assert circle == 1
+
+    # Dantes = 0 for all Circle I
+    def test_circle_i_zero_dantes(self):
+        _, dantes = classify_circle(["tests/a.py", "src/b.py"], span=20)
+        assert dantes == 0.0
+
+    # Boilerplate integration: sarif_to_clone_blocks forces circle=1 for boilerplate kind
+    def test_sarif_boilerplate_is_circle_i(self, tmp_path):
+        sarif_path = write_sarif(tmp_path, [
+            make_result([
+                region(PATH_A, name="getName"),
+                region(PATH_B, name="getName"),
+            ])
+        ])
+        blocks = sarif_to_clone_blocks(sarif_path, FILE_ID_MAP, "loose")
+        assert blocks[0].kind == "boilerplate"
+        assert blocks[0].circle == 1
+        assert blocks[0].dantes == 0.0
+
+    # circle and dantes are set on ordinary blocks
+    def test_sarif_cross_file_block_has_circle_set(self, tmp_path):
+        sarif_path = write_sarif(tmp_path, [
+            make_result([region(PATH_A), region(PATH_B)])
+        ])
+        blocks = sarif_to_clone_blocks(sarif_path, FILE_ID_MAP, "loose")
+        assert blocks[0].circle in range(1, 8)
+        assert blocks[0].dantes >= 0.0
+
+    # ------------------------------------------------------------------
+    # Negative cases — things that do NOT qualify for a given circle
+    # ------------------------------------------------------------------
+
+    # Circle I negative: cross-module + long span → should NOT stay at I
+    def test_cross_module_long_span_not_circle_i(self):
+        circle = classify_circle(["app/service.py", "core/handler.py"], span=20)[0]
+        assert circle != 1
+
+    # Circle II negative: cross-file blocks → cannot be II
+    def test_cross_file_not_circle_ii(self):
+        circle = classify_circle(["src/a.py", "src/b.py"], span=10)[0]
+        assert circle != 2
+
+    # Circle III negative: a non-vendor dir named 'utils' → not III
+    def test_utils_dir_not_circle_iii(self):
+        circle = classify_circle(["src/utils/helper.py", "core/helper.py"], span=15)[0]
+        assert circle != 3
+
+    # Circle IV negative: lexically distant dir names → not IV
+    def test_distant_dir_names_not_circle_iv(self):
+        # 'postgres' vs 'sqlite' — edit distance >> 2; should fall to VI (span≥15)
+        circle = classify_circle(
+            ["db/postgres/connector.py", "db/sqlite/connector.py"], span=20
+        )[0]
+        assert circle != 4
+
+    # Circle V negative: depth=0 (files directly in sister dirs) → not V (goes to IV)
+    def test_shallow_sister_dirs_not_circle_v(self):
+        # Adapter.java directly in rxjava2/ and rxjava3/ — depth 0, not a fork
+        circle = classify_circle(
+            ["adapters/rxjava2/Adapter.java", "adapters/rxjava3/Adapter.java"], span=20
+        )[0]
+        assert circle != 5
+
+    # Circle V negative: different filenames in sister dirs → not a fork
+    def test_different_filenames_not_circle_v(self):
+        circle = classify_circle(
+            ["x-pack/plugin/esql/src/Foo.java", "x-pack/plugin/ql/src/Bar.java"], span=40
+        )[0]
+        assert circle != 5
+
+    # ------------------------------------------------------------------
+    # Java fixture-based positive cases (paths from tests/fixtures/cpha/)
+    # ------------------------------------------------------------------
+
+    def test_java_test_dir_circle_i(self):
+        circle = classify_circle([CPHA_I_TEST, CPHA_I_MAIN], span=20)[0]
+        assert circle == 1
+
+    def test_java_generated_dir_circle_i(self):
+        circle = classify_circle([CPHA_I_GENERATED, CPHA_I_MAIN], span=20)[0]
+        assert circle == 1
+
+    def test_java_intrafile_circle_ii(self):
+        circle = classify_circle([CPHA_II_FILE, CPHA_II_FILE], span=8)[0]
+        assert circle == 2
+
+    def test_java_vendor_circle_iii(self):
+        circle, dantes = classify_circle([CPHA_III_MAIN, CPHA_III_VENDOR], span=25)
+        assert circle == 3
+        assert dantes == 0.15
+
+    def test_java_adapter_circle_iv(self):
+        # rxjava2/src/ vs rxjava3/src/ — files nested 1 level inside sibling dirs
+        circle, dantes = classify_circle([CPHA_IV_RX2, CPHA_IV_RX3], span=30)
+        assert circle == 4
+        assert dantes == round(0.3 * 1, 4)
+
+    def test_java_fork_circle_v(self):
+        # plugin/esql/src/…/AstBuilder.java vs plugin/ql/src/…/AstBuilder.java
+        circle, dantes = classify_circle([CPHA_V_ESQL, CPHA_V_QL], span=50)
+        assert circle == 5
+        assert dantes == 0.6
+
+    def test_java_scattered_circle_vi(self):
+        circle, dantes = classify_circle([CPHA_VI_INSTANCE, CPHA_VI_COMMAND], span=18)
+        assert circle == 6
+        assert dantes == round(0.7 * 2, 4)
+
+    def test_java_endemic_circle_vii(self):
+        import math
+        circle, dantes = classify_circle(CPHA_VII_PRINTERS, span=40)
+        assert circle == 7
+        assert dantes == round(1.0 * 6 * math.log2(40), 4)
 
 
 # ---------------------------------------------------------------------------
