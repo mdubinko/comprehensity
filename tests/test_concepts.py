@@ -3,8 +3,12 @@
 from blueprint import Blueprint, FileEntry, ModuleEntry, SymbolEntry
 from concepts import (
     EXPERIMENT_KEY,
+    _boundary_violations,
+    _coherence_distribution,
+    _is_test_file,
     _simple_stem,
     _split_identifier,
+    _test_oracle,
     attach_concept_experiment,
     concept_experiment_payload,
 )
@@ -153,3 +157,167 @@ def test_attach_concept_experiment_uses_namespaced_extension_key():
     bp = attach_concept_experiment(_bp())
     assert EXPERIMENT_KEY in bp.x_experimental
     assert bp.x_experimental[EXPERIMENT_KEY]["cluster_count"] == 2
+
+
+# --- depth_ratio ---
+
+def test_concept_payload_depth_ratio():
+    # auth (m0): 3 exported, 2 private  → depth_ratio = round(2/3, 2) = 0.67
+    # billing (m1): 1 exported, 0 private → depth_ratio = 0.0
+    payload = concept_experiment_payload(_bp())
+    auth = next(c for c in payload["clusters"] if c["name"] == "auth")
+    billing = next(c for c in payload["clusters"] if c["name"] == "billing")
+    assert auth["depth_ratio"] == round(2 / 3, 4)
+    assert billing["depth_ratio"] == 0.0
+
+
+# --- coherence_distribution ---
+
+def test_concept_payload_coherence_distribution_is_well_formed():
+    payload = concept_experiment_payload(_bp())
+    dist = payload["coherence_distribution"]
+    assert dist["cluster_count"] == 2
+    assert 0.0 <= dist["p25"] <= dist["p50"] <= dist["p75"] <= 1.0
+    assert 0.0 <= dist["mean"] <= 1.0
+
+
+def test_coherence_distribution_single_cluster():
+    dist = _coherence_distribution([{"level": "L2", "concept_strength_proxy": 0.6}])
+    assert dist == {"p25": 0.6, "p50": 0.6, "p75": 0.6, "mean": 0.6, "cluster_count": 1}
+
+
+def test_coherence_distribution_ignores_non_l2_clusters():
+    clusters = [
+        {"level": "L2", "concept_strength_proxy": 0.8},
+        {"level": "L3", "concept_strength_proxy": 0.1},  # should be ignored
+    ]
+    dist = _coherence_distribution(clusters)
+    assert dist["cluster_count"] == 1
+    assert dist["p50"] == 0.8
+
+
+# --- concept_aligned / alignment_gap ---
+
+def test_concept_payload_alignment_fields_present():
+    payload = concept_experiment_payload(_bp())
+    for cluster in payload["clusters"]:
+        assert "concept_aligned" in cluster
+        assert "alignment_gap" in cluster
+        if cluster["concept_aligned"]:
+            assert cluster["alignment_gap"] is None
+        else:
+            assert cluster["alignment_gap"] == cluster["dominant_term"]
+
+
+# --- _is_test_file ---
+
+def _fe(path: str, ext: str = ".py") -> FileEntry:
+    return FileEntry(id="x", path=path, size_bytes=0, ext=ext)
+
+
+def test_is_test_file_detects_jest_and_dotspec_patterns():
+    # __tests__ directory (Jest)
+    assert _is_test_file(_fe("src/__tests__/auth.ts", ".ts"))
+    assert _is_test_file(_fe("__tests__/auth.ts", ".ts"))
+    # .spec. double-extension (Jasmine / Angular / Vitest)
+    assert _is_test_file(_fe("src/auth.spec.ts", ".ts"))
+    assert _is_test_file(_fe("src/auth.spec.js", ".js"))
+    assert _is_test_file(_fe("src/auth.spec.tsx", ".tsx"))
+    # .test. double-extension (Jest / Vitest)
+    assert _is_test_file(_fe("src/auth.test.ts", ".ts"))
+    assert _is_test_file(_fe("src/auth.test.jsx", ".jsx"))
+    # existing patterns still work
+    assert _is_test_file(_fe("tests/auth.py"))
+    assert _is_test_file(_fe("test/auth.py"))
+    assert _is_test_file(_fe("spec/auth.rb", ".rb"))
+    assert _is_test_file(_fe("test_auth.py"))
+    assert _is_test_file(_fe("auth_test.py"))
+    # non-test files are not flagged
+    assert not _is_test_file(_fe("src/auth.ts", ".ts"))
+    assert not _is_test_file(_fe("src/auth_service.ts", ".ts"))
+    assert not _is_test_file(_fe("latest.ts", ".ts"))
+
+
+# --- _boundary_violations ---
+
+def _two_cluster_setup():
+    """Auth + billing clusters with a misplaced billing file in auth."""
+    auth_file = FileEntry(
+        id="f0", path="auth/session.py", size_bytes=100, ext=".py",
+        comment_desc="Session token authentication.",
+    )
+    misplaced = FileEntry(
+        id="f1", path="auth/invoice_handler.py", size_bytes=100, ext=".py",
+        comment_desc="Invoice payment billing calculation.",
+    )
+    billing_file = FileEntry(
+        id="f2", path="billing/invoice.py", size_bytes=100, ext=".py",
+        comment_desc="Invoice payment billing.",
+    )
+    clusters = [
+        {"cluster_id": "m0", "name": "auth",
+         "top_terms": [{"term": "session"}, {"term": "token"}, {"term": "authentication"}]},
+        {"cluster_id": "m1", "name": "billing",
+         "top_terms": [{"term": "invoice"}, {"term": "payment"}, {"term": "billing"}]},
+    ]
+    modules = [
+        ModuleEntry(id="m0", level="L2", name="auth", root_path="auth", file_ids=["f0", "f1"]),
+        ModuleEntry(id="m1", level="L2", name="billing", root_path="billing", file_ids=["f2"]),
+    ]
+    file_by_id = {"f0": auth_file, "f1": misplaced, "f2": billing_file}
+    return clusters, file_by_id, modules
+
+
+def test_boundary_violations_flags_misplaced_file():
+    clusters, file_by_id, modules = _two_cluster_setup()
+    violations = _boundary_violations(clusters, file_by_id, modules)
+    violation_paths = {v["path"] for v in violations}
+    assert "auth/invoice_handler.py" in violation_paths
+
+
+def test_boundary_violations_result_structure():
+    clusters, file_by_id, modules = _two_cluster_setup()
+    violations = _boundary_violations(clusters, file_by_id, modules)
+    for v in violations:
+        assert {"file_id", "path", "home_cluster_id", "home_cluster_name",
+                "foreign_cluster_id", "foreign_cluster_name",
+                "home_overlap", "foreign_overlap"} <= v.keys()
+        assert v["foreign_overlap"] > v["home_overlap"]
+
+
+# --- _test_oracle ---
+
+def test_test_oracle_detects_vocabulary_drift():
+    test_file = FileEntry(
+        id="t0", path="tests/test_billing.py", size_bytes=100, ext=".py",
+        comment_desc="Invoice payment tests.",
+    )
+    auth_file = FileEntry(id="f0", path="auth/session.py", size_bytes=100, ext=".py")
+    clusters = [
+        {"cluster_id": "m0", "name": "auth",
+         "top_terms": [{"term": "session"}, {"term": "token"}, {"term": "authentication"}]},
+        {"cluster_id": "m1", "name": "billing",
+         "top_terms": [{"term": "invoice"}, {"term": "payment"}, {"term": "billing"}]},
+    ]
+    modules = [
+        ModuleEntry(id="m0", level="L2", name="auth", root_path="auth", file_ids=["f0", "t0"]),
+        ModuleEntry(id="m1", level="L2", name="billing", root_path="billing", file_ids=[]),
+    ]
+    file_by_id = {"f0": auth_file, "t0": test_file}
+
+    result = _test_oracle(clusters, file_by_id, modules)
+    assert result["test_file_count"] == 1
+    mismatch_paths = {m["path"] for m in result["mismatches"]}
+    assert "tests/test_billing.py" in mismatch_paths
+
+
+def test_test_oracle_returns_empty_when_no_test_files():
+    clusters = [
+        {"cluster_id": "m0", "name": "auth",
+         "top_terms": [{"term": "session"}, {"term": "token"}]},
+    ]
+    modules = [ModuleEntry(id="m0", level="L2", name="auth", root_path="auth", file_ids=["f0"])]
+    src_file = FileEntry(id="f0", path="auth/session.py", size_bytes=100, ext=".py")
+    result = _test_oracle(clusters, {"f0": src_file}, modules)
+    assert result["test_file_count"] == 0
+    assert result["mismatches"] == []
