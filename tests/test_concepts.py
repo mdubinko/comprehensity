@@ -186,14 +186,27 @@ def test_coherence_distribution_single_cluster():
     assert dist == {"p25": 0.6, "p50": 0.6, "p75": 0.6, "mean": 0.6, "cluster_count": 1}
 
 
-def test_coherence_distribution_ignores_non_l2_clusters():
+def test_coherence_distribution_prefers_l2_over_l3():
+    # L3 is ignored when L2 clusters are present
     clusters = [
         {"level": "L2", "concept_strength_proxy": 0.8},
-        {"level": "L3", "concept_strength_proxy": 0.1},  # should be ignored
+        {"level": "L3", "concept_strength_proxy": 0.1},
     ]
     dist = _coherence_distribution(clusters)
     assert dist["cluster_count"] == 1
     assert dist["p50"] == 0.8
+
+
+def test_coherence_distribution_falls_back_to_l3():
+    # L3 used when no L2 clusters exist (e.g. small repos where Louvain finds no communities)
+    clusters = [
+        {"level": "L3", "concept_strength_proxy": 0.5},
+        {"level": "L3", "concept_strength_proxy": 0.7},
+        {"level": "L4", "concept_strength_proxy": 0.9},  # file-level, always excluded
+    ]
+    dist = _coherence_distribution(clusters)
+    assert dist["cluster_count"] == 2
+    assert dist["p50"] == 0.6
 
 
 # --- concept_aligned / alignment_gap ---

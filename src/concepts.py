@@ -25,11 +25,12 @@ _IDENT_PART_RE = re.compile(
 )
 _STOPWORDS = {
     "a", "after", "all", "an", "and", "any", "api", "app", "as", "author", "base",
-    "before", "by", "common", "core", "copyright", "data", "def", "default", "distribut",
+    "before", "by", "cmd", "common", "core", "copyright", "data", "def", "default", "distribut",
     "file", "for", "from", "get", "impl", "in", "init", "internal", "is", "licens",
     "license", "main", "manager", "model", "module", "new", "not", "object", "of",
-    "on", "one", "or", "perf", "set", "software", "src", "test", "tests", "the",
-    "to", "type", "types", "under", "use", "util", "utils", "value", "with", "without",
+    "on", "one", "or", "package", "perf", "pkg", "rust", "set", "software", "src",
+    "test", "tests", "the", "to", "type", "types", "under", "use", "util", "utils",
+    "value", "with", "without",
 }
 _STEM_EXCEPTIONS = {
     # -s endings that are not ordinary plurals.
@@ -296,8 +297,14 @@ def _is_test_file(fe: FileEntry) -> bool:
 
 
 def _coherence_distribution(clusters: list[dict]) -> dict:
-    """p25/p50/p75/mean of concept_strength_proxy across L2 clusters."""
+    """p25/p50/p75/mean of concept_strength_proxy across module-level clusters.
+
+    Uses L2 (graph-detected) clusters when available; falls back to L3
+    (directory-based) for repos where Louvain produces no communities.
+    """
     l2 = [c["concept_strength_proxy"] for c in clusters if c["level"] == "L2"]
+    if not l2:
+        l2 = [c["concept_strength_proxy"] for c in clusters if c["level"] == "L3"]
     if not l2:
         return {"p25": 0.0, "p50": 0.0, "p75": 0.0, "mean": 0.0, "cluster_count": 0}
     if len(l2) == 1:
