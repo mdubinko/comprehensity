@@ -19,9 +19,9 @@ for major structural breaks.
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 FORMAT_ID = "comprehensity-blueprint"
@@ -449,6 +449,8 @@ class Blueprint(BaseModel):
     Field order is intentional: summary → config audit trail → data sections.
     This lets clients audit provenance and scope before reading large arrays.
     """
+    model_config = ConfigDict(populate_by_name=True)
+
     format: Literal["comprehensity-blueprint"] = FORMAT_ID
     version: Literal["20260502"] = CURRENT_VERSION
     generated_at: datetime = Field(
@@ -497,6 +499,11 @@ class Blueprint(BaseModel):
     # VCS metadata — populated when the scanned directory is inside a git repo.
     # None when no .git directory is found (e.g. a plain directory checkout).
     vcs: Optional[VcsInfo] = None
+
+    # Experimental, opt-in extension data. Keys should be namespaced and versioned,
+    # e.g. "comprehensity.concepts.v0". Producers must only populate this when a
+    # runtime flag explicitly asks for unstable research signals.
+    x_experimental: Dict[str, Any] = Field(default_factory=dict, alias="x-experimental")
 
     # ------------------------------------------------------------------
     # Summary computation
@@ -612,6 +619,7 @@ class Blueprint(BaseModel):
 
     def to_json(self, **kwargs) -> str:
         """Serialize to JSON string. Passes kwargs to model_dump_json."""
+        kwargs.setdefault("by_alias", True)
         return self.model_dump_json(indent=2, **kwargs)
 
     @classmethod

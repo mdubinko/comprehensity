@@ -1,41 +1,5 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Comprehensity Blueprint",
-  "description": "Exchange format produced by extract-blueprint (phase 1) and consumed by analyze-blueprint (phase 2+). The format and version fields are fixed literals; a document that does not match is rejected at parse time.\n\nThis schema is generated directly from the Pydantic models in blueprint.py and is the authoritative contract between phases.",
   "$defs": {
-    "VcsInfo": {
-      "description": "Version control metadata for the scanned repository.\n\nPopulated by read_git_info() in vcs.py when a .git directory is found.\nNone on the Blueprint when no VCS root is detected.\n\nscm           : version control system — \"git\" or \"unknown\"\nvcs_ref       : full 40-char commit SHA, or null if unresolvable\nvcs_branch    : branch name, or null for detached HEAD (e.g. historical checkouts)\nvcs_timestamp : Unix committer timestamp from the commit object, or null\ngit_version   : installed git version, e.g. \"2.44.0\"; null if not on PATH",
-      "properties": {
-        "scm": {
-          "default": "unknown",
-          "enum": ["git", "unknown"],
-          "title": "Scm",
-          "type": "string"
-        },
-        "vcs_ref": {
-          "anyOf": [{"type": "string"}, {"type": "null"}],
-          "default": null,
-          "title": "Vcs Ref"
-        },
-        "vcs_branch": {
-          "anyOf": [{"type": "string"}, {"type": "null"}],
-          "default": null,
-          "title": "Vcs Branch"
-        },
-        "vcs_timestamp": {
-          "anyOf": [{"type": "integer"}, {"type": "null"}],
-          "default": null,
-          "title": "Vcs Timestamp"
-        },
-        "git_version": {
-          "anyOf": [{"type": "string"}, {"type": "null"}],
-          "default": null,
-          "title": "Git Version"
-        }
-      },
-      "title": "VcsInfo",
-      "type": "object"
-    },
     "AnalysisWarning": {
       "description": "A structured warning about incomplete or degraded analysis.\n\nAppended by extract_blueprint whenever a phase was skipped or degraded\n(e.g. node_modules absent, LSP server missing, clone detection timed out).\nPhase 2 surfaces these prominently so users know what to fix before re-running.\n\nphase    : which analysis phase was affected (\"semantic\", \"clone\", \"phase1\", etc.)\ncode     : machine-readable key (\"no_node_modules\", \"lsp_skip\", \"clone_timeout\", etc.)\nseverity : \"degraded\" | \"skipped\" | \"error\"\nmessage  : human-readable description of what was skipped or degraded\naction   : concrete command or step the user should run to fix it (empty string if N/A)",
       "properties": {
@@ -48,7 +12,11 @@
           "type": "string"
         },
         "severity": {
-          "enum": ["degraded", "skipped", "error"],
+          "enum": [
+            "degraded",
+            "skipped",
+            "error"
+          ],
           "title": "Severity",
           "type": "string"
         },
@@ -62,12 +30,17 @@
           "type": "string"
         }
       },
-      "required": ["phase", "code", "severity", "message"],
+      "required": [
+        "phase",
+        "code",
+        "severity",
+        "message"
+      ],
       "title": "AnalysisWarning",
       "type": "object"
     },
     "BlueprintSummary": {
-      "description": "Human-readable index of blueprint contents.\n\nAppears near the top of the serialized file so clients can audit scope\nand provenance before deciding whether to share the blueprint.\n\nSections are listed in inspection priority order:\n  1. config_path \u2014 provenance: what machine/config produced this\n  2. Section counts \u2014 scope: how much data is present\n  3. Status flags   \u2014 completeness: which passes ran",
+      "description": "Human-readable index of blueprint contents.\n\nAppears near the top of the serialized file so clients can audit scope\nand provenance before deciding whether to share the blueprint.\n\nSections are listed in inspection priority order:\n  1. config_path \u2014 provenance: what machine/config produced this\n  2. Section counts \u2014 scope: how much data is present\n  3. Status flags   \u2014 completeness: which passes ran\n\n# TODO(format): investigate more space-efficient, human-scannable formats.\n# JSON is verbose for large blueprints (158 files \u2192 ~2 MB). Options:\n#   - YAML: more readable for nested structures, widely supported\n#   - Custom per-section encoding, e.g. compact symboldef strings:\n#       \"s1130 f157 test_export_function_declaration 606-609 public\"\n#     (id, file_id, name, line-range, exported flag) \u2014 ~5x smaller than JSON\n#   - MessagePack / CBOR: binary, ~40% smaller, less human-scannable\n#   - Hybrid: human-readable header + binary data sections\n# Constraint: analyze_blueprint must be able to round-trip the format.",
       "properties": {
         "config_path": {
           "anyOf": [
@@ -176,7 +149,7 @@
       "type": "object"
     },
     "CloneBlock": {
-      "description": "A set of code regions that are duplicates of each other.\n\nMinimum two instances (a clone is by definition a pair or larger group).\nlines / tokens are the size of one instance, not the total across all.\n\nkind:\n  \"exact\"       \u2014 truly identical AST (treepeat ruleset: none)\n  \"normalized\"  \u2014 whitespace, string literals, function names normalized\n                  (treepeat ruleset: default)\n  \"approximate\" \u2014 additionally anonymizes identifiers and constants\n                  (treepeat ruleset: loose)\n  \"semantic\"    \u2014 reserved for future semantic / embedding-based detection",
+      "description": "A set of code regions that are duplicates of each other.\n\nMinimum two instances (a clone is by definition a pair or larger group).\nlines / tokens are the size of one instance, not the total across all.\n\nkind:\n  \"exact\"       \u2014 truly identical AST (treepeat ruleset: none)\n  \"normalized\"  \u2014 whitespace, string literals, function names normalized\n                  (treepeat ruleset: default)\n  \"approximate\" \u2014 additionally anonymizes identifiers and constants\n                  (treepeat ruleset: loose)\n  \"semantic\"    \u2014 reserved for future semantic / embedding-based detection\n\ncircle / dantes \u2014 CPHA severity classification (Seven Circles of Copy-Paste Hell).\n  circle : 1 (Conjured/harmless) \u2026 7 (Endemic/codebase-corrupting); default 1.\n  dantes : weighted severity score for this block; sum across all blocks then\n           divide by total_files to get the dantes_per_file headline metric.",
       "properties": {
         "id": {
           "title": "Id",
@@ -211,6 +184,26 @@
           "minimum": 0,
           "title": "Tokens",
           "type": "integer"
+        },
+        "circle": {
+          "default": 1,
+          "enum": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7
+          ],
+          "title": "Circle",
+          "type": "integer"
+        },
+        "dantes": {
+          "default": 0.0,
+          "minimum": 0.0,
+          "title": "Dantes",
+          "type": "number"
         }
       },
       "required": [
@@ -767,8 +760,73 @@
       ],
       "title": "SymbolEntry",
       "type": "object"
+    },
+    "VcsInfo": {
+      "description": "Version control metadata for the scanned repository.\n\nPopulated by read_git_info() in vcs.py when a .git directory is found.\nNone on the Blueprint when no VCS root is detected.\n\nscm           : version control system \u2014 \"git\" or \"unknown\"\nvcs_ref       : full 40-char commit SHA, or None if unresolvable\nvcs_branch    : branch name, or None for detached HEAD (e.g. historical checkouts)\nvcs_timestamp : Unix committer timestamp from the commit object, or None\n                (None when the object is packed rather than loose)\ngit_version   : installed git version, e.g. \"2.44.0\"; None if not on PATH",
+      "properties": {
+        "scm": {
+          "default": "unknown",
+          "enum": [
+            "git",
+            "unknown"
+          ],
+          "title": "Scm",
+          "type": "string"
+        },
+        "vcs_ref": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Vcs Ref"
+        },
+        "vcs_branch": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Vcs Branch"
+        },
+        "vcs_timestamp": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Vcs Timestamp"
+        },
+        "git_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Git Version"
+        }
+      },
+      "title": "VcsInfo",
+      "type": "object"
     }
   },
+  "description": "The complete exchange artifact produced by extract_blueprint.\n\nformat / version are literal types so Pydantic rejects documents that\nclaim to be a different format or an unsupported version at parse time.\n\nclone_status:\n  \"stub\"     \u2014 clone detection was not run; clone_blocks is empty\n  \"complete\" \u2014 clone_blocks reflects a real detection pass\n\nField order is intentional: summary \u2192 config audit trail \u2192 data sections.\nThis lets clients audit provenance and scope before reading large arrays.",
   "properties": {
     "format": {
       "const": "comprehensity-blueprint",
@@ -777,8 +835,8 @@
       "type": "string"
     },
     "version": {
-      "const": "1",
-      "default": "1",
+      "const": "20260502",
+      "default": "20260502",
       "title": "Version",
       "type": "string"
     },
@@ -989,12 +1047,22 @@
     },
     "vcs": {
       "anyOf": [
-        {"$ref": "#/$defs/VcsInfo"},
-        {"type": "null"}
+        {
+          "$ref": "#/$defs/VcsInfo"
+        },
+        {
+          "type": "null"
+        }
       ],
-      "default": null,
-      "title": "Vcs"
+      "default": null
+    },
+    "x-experimental": {
+      "additionalProperties": true,
+      "title": "X-Experimental",
+      "type": "object"
     }
   },
-  "type": "object"
+  "title": "Comprehensity Blueprint",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
 }

@@ -300,6 +300,9 @@ def generate_directory_listing(root_path, output_file=None, args=None):
                 detect_clones=detect_clones,
                 clone_ruleset=clone_ruleset,
             )
+            if getattr(args, "experimental_concepts", False):
+                from concepts import attach_concept_experiment
+                attach_concept_experiment(bp)
             content = bp.to_json()
         case _:
             content = graph.to_json_format(include_metadata=True)
@@ -465,6 +468,14 @@ Examples:
         choices=["none", "default", "loose"],
         default="loose",
         help="Clone normalisation level: none=exact, default=normalized, loose=approximate (default: loose)",
+    )
+    parser.add_argument(
+        "--experimental-concepts",
+        action="store_true",
+        help=(
+            "Attach experimental linguistic concept signals under x-experimental "
+            "(blueprint format only)"
+        ),
     )
 
     parser.add_argument(

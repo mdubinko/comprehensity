@@ -237,6 +237,14 @@ Examples:
             "Pass an explicit path to override, or '--clones-output none' to suppress saving."
         ),
     )
+    parser.add_argument(
+        "--experimental-concepts",
+        action="store_true",
+        help=(
+            "Attach experimental linguistic concept signals under x-experimental. "
+            "Opt-in research output; not part of stable production scoring."
+        ),
+    )
 
     args = parser.parse_args()
 
@@ -360,6 +368,11 @@ Examples:
 
     from vcs import read_git_info
     bp.vcs = read_git_info(root)
+
+    if args.experimental_concepts:
+        from concepts import attach_concept_experiment
+        bp = attach_concept_experiment(bp)
+        applog.info("  experimental concepts attached")
 
     if args.semantic:
         if not cfg.extract.semantic_enrichment:

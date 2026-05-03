@@ -163,6 +163,32 @@ class TestExtractBlueprintCLI:
         assert pkg_module is not None
         assert pkg_module.name == "mypkg"
 
+    def test_experimental_concepts_flag_attaches_extension_payload(self, tmp_path, monkeypatch):
+        _write(tmp_path, "auth/__init__.py", "")
+        _write(tmp_path, "auth/session_store.py", "class SessionStore: pass\n")
+        out = tmp_path / "bp.json"
+        monkeypatch.setattr(
+            sys, "argv",
+            [
+                "extract_blueprint",
+                str(tmp_path),
+                "-o",
+                str(out),
+                "--extensions",
+                ".py",
+                "--experimental-concepts",
+                "--format",
+                "json",
+            ],
+        )
+        eb.main()
+
+        raw = json.loads(out.read_text())
+        assert "x-experimental" in raw
+        payload = raw["x-experimental"]["comprehensity.concepts.v0"]
+        assert payload["status"] == "complete"
+        assert payload["cluster_count"] >= 1
+
 
 # ---------------------------------------------------------------------------
 # FileEntry.comment_desc — comment / docstring extraction

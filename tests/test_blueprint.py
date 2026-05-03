@@ -85,6 +85,23 @@ class TestCloneBlockKindRoundTrip:
         assert data["kind"] == "exact"
 
 
+class TestExperimentalExtensions:
+    def test_x_experimental_serializes_with_hyphenated_key(self):
+        bp = Blueprint(x_experimental={"comprehensity.example.v0": {"ok": True}})
+        raw = json.loads(bp.to_json())
+        assert "x-experimental" in raw
+        assert "x_experimental" not in raw
+        assert raw["x-experimental"]["comprehensity.example.v0"]["ok"] is True
+
+    def test_x_experimental_round_trips_from_hyphenated_key(self):
+        bp = Blueprint.from_json(json.dumps({
+            "format": "comprehensity-blueprint",
+            "version": "20260502",
+            "x-experimental": {"comprehensity.example.v0": {"ok": True}},
+        }))
+        assert bp.x_experimental["comprehensity.example.v0"]["ok"] is True
+
+
 # ---------------------------------------------------------------------------
 # validate_refs — CloneBlock with kind
 # ---------------------------------------------------------------------------
