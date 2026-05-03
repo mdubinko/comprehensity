@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import math
 import re
+import statistics
 from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Iterable
@@ -23,12 +24,12 @@ _IDENT_PART_RE = re.compile(
     r"[A-Z]+(?=[A-Z][a-z]|[0-9]|\b)|[A-Z]?[a-z]+|[0-9]+"
 )
 _STOPWORDS = {
-    "a", "an", "and", "any", "api", "app", "as", "base", "by", "common", "core",
-    "copyright", "data", "def", "default", "file", "for", "from", "get", "impl", "in",
-    "init", "internal", "is", "main", "manager", "model", "module", "new",
-    "object", "of", "on", "one", "or", "perf", "set", "src", "test", "tests",
-    "the", "to", "type", "types", "use", "util", "utils", "value", "with",
-    "without",
+    "a", "after", "all", "an", "and", "any", "api", "app", "as", "author", "base",
+    "before", "by", "common", "core", "copyright", "data", "def", "default", "distribut",
+    "file", "for", "from", "get", "impl", "in", "init", "internal", "is", "licens",
+    "license", "main", "manager", "model", "module", "new", "not", "object", "of",
+    "on", "one", "or", "perf", "set", "software", "src", "test", "tests", "the",
+    "to", "type", "types", "under", "use", "util", "utils", "value", "with", "without",
 }
 _STEM_EXCEPTIONS = {
     # -s endings that are not ordinary plurals.
@@ -66,9 +67,20 @@ _ABBREVIATIONS = {
 _COMPOUND_PARTS = tuple(
     sorted(
         {
+            # Original set
             "admin", "app", "apps", "blueprint", "cli", "domain", "error",
             "frontend", "guide", "import", "inner", "module", "multi",
             "server", "subdomain", "test", "user",
+            # Generic architectural / infra words (appear as prefixes in glued identifiers)
+            # e.g. errorhandler, pluginregistry, querybuilder, cachestore, eventhandler
+            "action", "annotation", "attention", "backend", "builder", "cache",
+            "client", "cluster", "config", "connector", "dispatcher", "embedding",
+            "engine", "event", "executor", "factory", "filter", "graph", "handler",
+            "index", "integration", "listener", "locale", "logger", "message",
+            "middleware", "migration", "pipeline", "plugin", "processor", "provider",
+            "proxy", "query", "queue", "registry", "resolver", "router", "scheduler",
+            "schema", "search", "security", "serializer", "service", "template",
+            "token", "transform", "validator", "worker",
             *_ABBREVIATIONS.keys(),
         },
         key=len,
@@ -109,7 +121,12 @@ def _split_known_compound(part: str) -> list[str]:
     while i < len(part):
         match = next((key for key in _COMPOUND_PARTS if part.startswith(key, i)), None)
         if match is None:
-            return [part]
+            # Only keep a remainder that's long enough to be a real word fragment.
+            # Short remainders (e.g. "onse" from "resp"+"onse" in "response") are
+            # abbreviation-prefix artifacts, not genuine split words.
+            if len(part[i:]) >= 5:
+                out.append(part[i:])
+            break
         out.append(match)
         i += len(match)
     return out if len(out) > 1 else [part]
@@ -262,6 +279,172 @@ def _tokens_in_file(fe: FileEntry) -> set[str]:
     return tokens
 
 
+_TEST_PATH_RE = re.compile(r"(?:^|/)(?:tests?|spec|__tests__)/")
+
+
+def _is_test_file(fe: FileEntry) -> bool:
+    stem = Path(fe.path).stem
+    name = Path(fe.path).name
+    return (
+        bool(_TEST_PATH_RE.search(fe.path))
+        or stem.startswith("test_")
+        or stem.endswith("_test")
+        or stem.endswith("_spec")
+        or ".spec." in name   # foo.spec.ts, foo.spec.js
+        or ".test." in name   # foo.test.ts, foo.test.js
+    )
+
+
+def _coherence_distribution(clusters: list[dict]) -> dict:
+    """p25/p50/p75/mean of concept_strength_proxy across L2 clusters."""
+    l2 = [c["concept_strength_proxy"] for c in clusters if c["level"] == "L2"]
+    if not l2:
+        return {"p25": 0.0, "p50": 0.0, "p75": 0.0, "mean": 0.0, "cluster_count": 0}
+    if len(l2) == 1:
+        v = _round(l2[0])
+        return {"p25": v, "p50": v, "p75": v, "mean": v, "cluster_count": 1}
+    qs = statistics.quantiles(l2, n=4)
+    return {
+        "p25": _round(qs[0]),
+        "p50": _round(statistics.median(l2)),
+        "p75": _round(qs[2]),
+        "mean": _round(statistics.mean(l2)),
+        "cluster_count": len(l2),
+    }
+
+
+def _boundary_violations(
+    clusters: list[dict],
+    file_by_id: dict[str, FileEntry],
+    modules: list[ModuleEntry],
+) -> list[dict]:
+    """Files whose vocabulary aligns better with a foreign cluster than their own."""
+    file_to_cluster: dict[str, str] = {}
+    for mod in modules:
+        for fid in mod.file_ids:
+            file_to_cluster[fid] = mod.id
+
+    cluster_terms: dict[str, set[str]] = {
+        c["cluster_id"]: {row["term"] for row in c["top_terms"][:8]}
+        for c in clusters
+    }
+    cluster_names: dict[str, str] = {c["cluster_id"]: c["name"] for c in clusters}
+
+    violations: list[dict] = []
+    for file_id, fe in file_by_id.items():
+        home_cid = file_to_cluster.get(file_id)
+        if not home_cid:
+            continue
+        file_vocab = _tokens_in_file(fe)
+        if not file_vocab:
+            continue
+
+        home_terms = cluster_terms.get(home_cid, set())
+        union = file_vocab | home_terms
+        home_overlap = len(file_vocab & home_terms) / len(union) if union else 0.0
+
+        best_foreign_cid: str | None = None
+        best_foreign_overlap = 0.0
+        for cid, terms in cluster_terms.items():
+            if cid == home_cid or not terms:
+                continue
+            u = file_vocab | terms
+            overlap = len(file_vocab & terms) / len(u) if u else 0.0
+            if overlap > best_foreign_overlap:
+                best_foreign_overlap = overlap
+                best_foreign_cid = cid
+
+        if best_foreign_cid and best_foreign_overlap > home_overlap + 0.1:
+            violations.append({
+                "file_id": file_id,
+                "path": fe.path,
+                "home_cluster_id": home_cid,
+                "home_cluster_name": cluster_names.get(home_cid, ""),
+                "foreign_cluster_id": best_foreign_cid,
+                "foreign_cluster_name": cluster_names.get(best_foreign_cid, ""),
+                "home_overlap": _round(home_overlap),
+                "foreign_overlap": _round(best_foreign_overlap),
+            })
+
+    violations.sort(key=lambda v: -(v["foreign_overlap"] - v["home_overlap"]))
+    return violations
+
+
+def _test_oracle(
+    clusters: list[dict],
+    file_by_id: dict[str, FileEntry],
+    modules: list[ModuleEntry],
+) -> dict:
+    """Compare test file vocabulary to source cluster vocabulary.
+
+    Test file names were written to describe what they test — treat them as
+    ground truth for concept presence. Vocabulary drift is expected over time;
+    weight this as a weak signal.
+    """
+    file_to_cluster: dict[str, str] = {}
+    for mod in modules:
+        for fid in mod.file_ids:
+            file_to_cluster[fid] = mod.id
+
+    cluster_terms: dict[str, set[str]] = {
+        c["cluster_id"]: {row["term"] for row in c["top_terms"][:8]}
+        for c in clusters
+    }
+    cluster_names: dict[str, str] = {c["cluster_id"]: c["name"] for c in clusters}
+
+    test_files = [fe for fe in file_by_id.values() if _is_test_file(fe)]
+    if not test_files or not cluster_terms:
+        return {"test_file_count": 0, "matched_count": 0, "unmatched_count": 0, "mismatches": []}
+
+    matched = 0
+    unmatched = 0
+    mismatches: list[dict] = []
+
+    for fe in test_files:
+        file_vocab = _tokens_in_file(fe)
+        if not file_vocab:
+            unmatched += 1
+            continue
+
+        best_cid: str | None = None
+        best_overlap = 0.0
+        for cid, terms in cluster_terms.items():
+            if not terms:
+                continue
+            u = file_vocab | terms
+            overlap = len(file_vocab & terms) / len(u) if u else 0.0
+            if overlap > best_overlap:
+                best_overlap = overlap
+                best_cid = cid
+
+        if best_cid is None or best_overlap == 0.0:
+            unmatched += 1
+            continue
+
+        home_cid = file_to_cluster.get(fe.id)
+        if home_cid is None or home_cid == best_cid:
+            matched += 1
+        else:
+            mismatches.append({
+                "file_id": fe.id,
+                "path": fe.path,
+                "structural_cluster_id": home_cid,
+                "structural_cluster_name": cluster_names.get(home_cid, ""),
+                "vocabulary_cluster_id": best_cid,
+                "vocabulary_cluster_name": cluster_names.get(best_cid, ""),
+                "overlap": _round(best_overlap),
+            })
+            matched += 1
+
+    mismatches.sort(key=lambda m: -m["overlap"])
+    return {
+        "test_file_count": len(test_files),
+        "matched_count": matched,
+        "unmatched_count": unmatched,
+        "mismatches": mismatches,
+    }
+
+
 def _cluster_payload(
     module: ModuleEntry,
     file_by_id: dict[str, FileEntry],
@@ -270,7 +453,10 @@ def _cluster_payload(
     file_ids = set(module.file_ids)
     cluster_files = [file_by_id[fid] for fid in module.file_ids if fid in file_by_id]
     cluster_symbols = _symbols_for_files(symbols, file_ids)
+    exported_symbols = [sym for sym in cluster_symbols if sym.is_exported]
 
+    # counts drives concept detection (dominant term, entropy, concept_strength_proxy).
+    # Reporting counters (symbol_counts etc.) preserve raw frequencies for evidence output.
     counts: Counter[str] = Counter()
     symbol_counts: Counter[str] = Counter()
     public_symbol_counts: Counter[str] = Counter()
@@ -280,9 +466,16 @@ def _cluster_payload(
     public_symbol_kind_term_counts: dict[str, Counter[str]] = defaultdict(Counter)
     private_symbol_kind_term_counts: dict[str, Counter[str]] = defaultdict(Counter)
     sources: dict[str, set[str]] = defaultdict(set)
+    # Set-based presence counters: how many symbols of each visibility mention each term.
+    # Used for normalized concept detection — cluster size does not inflate term weight.
+    public_term_presence: Counter[str] = Counter()
+    private_term_presence: Counter[str] = Counter()
 
-    for term in _split_identifier(module.name):
-        counts[term] += 3
+    # Module name: fixed budget spread evenly across unique tokens.
+    module_tokens = set(_split_identifier(module.name))
+    module_budget = 3.0 / len(module_tokens) if module_tokens else 0.0
+    for term in module_tokens:
+        counts[term] += module_budget
         sources[term].add("module")
 
     for fe in cluster_files:
@@ -300,7 +493,10 @@ def _cluster_payload(
 
     for sym in cluster_symbols:
         symbol_kind_counts[sym.kind] += 1
-        for term in _split_identifier(sym.name):
+        sym_terms_list = _split_identifier(sym.name)
+        sym_terms_set = set(sym_terms_list)
+        # Raw list-based counts for reporting evidence.
+        for term in sym_terms_list:
             symbol_counts[term] += 1
             symbol_kind_term_counts[sym.kind][term] += 1
             if sym.is_exported:
@@ -309,8 +505,26 @@ def _cluster_payload(
             else:
                 private_symbol_counts[term] += 1
                 private_symbol_kind_term_counts[sym.kind][term] += 1
-            counts[term] += 3
+        # Set-based presence for normalized concept detection.
+        for term in sym_terms_set:
+            if sym.is_exported:
+                public_term_presence[term] += 1
+            else:
+                private_term_presence[term] += 1
             sources[term].add("symbol")
+
+    # Normalize symbol contributions: fixed budgets per visibility class,
+    # weighted by the fraction of symbols mentioning each term.
+    # A 5-symbol and a 500-symbol cluster contribute equal total symbol weight.
+    # Public symbols outweigh private: interface vocabulary defines the module's concept.
+    _PUBLIC_BUDGET = 4.0
+    _PRIVATE_BUDGET = 1.0
+    n_public = len(exported_symbols)
+    n_private = len(cluster_symbols) - n_public
+    for term, cnt in public_term_presence.items():
+        counts[term] += _PUBLIC_BUDGET * (cnt / n_public) if n_public else 0.0
+    for term, cnt in private_term_presence.items():
+        counts[term] += _PRIVATE_BUDGET * (cnt / n_private) if n_private else 0.0
 
     token_total = sum(counts.values())
     unique_tokens = len(counts)
@@ -324,7 +538,6 @@ def _cluster_payload(
     normalized_entropy = _entropy(counts) / max_entropy if max_entropy else 0.0
     vocabulary_tightness = 1.0 - normalized_entropy
 
-    exported_symbols = [sym for sym in cluster_symbols if sym.is_exported]
     public_symbol_ratio = (
         len(exported_symbols) / len(cluster_symbols) if cluster_symbols else 0.0
     )
@@ -357,6 +570,14 @@ def _cluster_payload(
         + 0.20 * file_coverage
     )
 
+    # Ousterhout depth: high ratio = narrow interface + rich internals = easier agent scoping.
+    # 0.0 when no exported symbols (no declared interface; treat as maximally shallow).
+    depth_ratio = _round(n_private / n_public) if n_public else 0.0
+
+    # Alignment: does the module's name reflect its dominant vocabulary concept?
+    concept_aligned = (dominant is None) or (dominant in module_tokens)
+    alignment_gap = None if concept_aligned else dominant
+
     return {
         "cluster_id": module.id,
         "level": module.level,
@@ -366,7 +587,10 @@ def _cluster_payload(
         "symbol_count": len(cluster_symbols),
         "exported_symbol_count": len(exported_symbols),
         "private_symbol_count": len(cluster_symbols) - len(exported_symbols),
+        "depth_ratio": depth_ratio,
         "public_symbol_ratio": _round(public_symbol_ratio),
+        "concept_aligned": concept_aligned,
+        "alignment_gap": alignment_gap,
         "symbol_kind_counts": dict(sorted(symbol_kind_counts.items())),
         "token_count": token_total,
         "unique_token_count": unique_tokens,
@@ -406,6 +630,17 @@ def concept_experiment_payload(bp: Blueprint) -> dict:
         )
     )
     candidates = _concept_candidates(bp, modules, file_by_id)
+    godterm_count = sum(1 for c in candidates if c["godterm"])
+
+    misaligned = [
+        {"cluster_id": c["cluster_id"], "name": c["name"], "dominant_term": c["alignment_gap"]}
+        for c in clusters if not c["concept_aligned"]
+    ]
+    shallow_module_rate = _round(
+        sum(1 for c in clusters if c["depth_ratio"] < 1.0) / len(clusters)
+        if clusters else 0.0
+    )
+
     return {
         "schema": EXPERIMENT_KEY,
         "status": "complete",
@@ -414,16 +649,23 @@ def concept_experiment_payload(bp: Blueprint) -> dict:
             "experimental proxies for downstream evaluation, not production ratings."
         ),
         "cluster_count": len(clusters),
+        "coherence_distribution": _coherence_distribution(clusters),
+        "shallow_module_rate": shallow_module_rate,
+        "misaligned_cluster_count": len(misaligned),
+        "misaligned_clusters": misaligned,
         "clusters": clusters,
         "candidate_count": len(candidates),
+        "godterm_count": godterm_count,
         "candidates": candidates,
+        "boundary_violations": _boundary_violations(clusters, file_by_id, modules),
+        "test_oracle": _test_oracle(clusters, file_by_id, modules),
     }
 
 
 def attach_concept_experiment(bp: Blueprint) -> Blueprint:
-    """Attach the concept experiment payload to bp.x_experimental in place."""
-    bp.x_experimental[EXPERIMENT_KEY] = concept_experiment_payload(bp)
-    return bp
+    """Return a new Blueprint with the concept experiment payload in x_experimental."""
+    payload = concept_experiment_payload(bp)
+    return bp.model_copy(update={"x_experimental": {**bp.x_experimental, EXPERIMENT_KEY: payload}})
 
 
 def _concept_candidates(
@@ -460,6 +702,10 @@ def _concept_candidates(
         for token in module_tokens:
             token_modules[token].add(mod.id)
 
+    N = len(modules)
+    # BM25-style IDF ceiling: theoretical max when a term appears in no cluster (df=0).
+    max_idf = math.log((N + 0.5) / 0.5 + 1) if N > 0 else 1.0
+
     candidates: list[dict] = []
     total_files = max(len(bp.files), 1)
     total_symbols = max(len(bp.symbols), 1)
@@ -472,18 +718,25 @@ def _concept_candidates(
         support = (file_count / total_files) + (symbol_count / total_symbols)
         exported_ratio = exported_count / symbol_count if symbol_count else 0.0
         module_count = len(token_modules[token])
-        concentration = 1.0 / module_count if module_count else 0.0
-        score = (0.55 * support) + (0.25 * exported_ratio) + (0.20 * concentration)
+        # IDF: penalizes terms that appear in many clusters (godterms sort to bottom).
+        df = module_count
+        idf = math.log((N - df + 0.5) / (df + 0.5) + 1)
+        idf_norm = _round(idf / max_idf) if max_idf > 0 else 0.0
+        # weights uncalibrated; revisit after Flask/Requests validation experiment
+        score = (0.30 * support) + (0.40 * exported_ratio) + (0.30 * idf_norm)
+        # Omnipresent terms (appearing in >half of clusters) carry no discriminative signal.
+        godterm = module_count > max(2, N // 2)
         candidates.append({
             "term": token,
             "file_count": file_count,
             "symbol_count": symbol_count,
             "exported_symbol_count": exported_count,
             "module_count": module_count,
-            "module_ids": sorted(token_modules[token])[:8],
+            "module_ids": sorted(token_modules[token]),
             "support": _round(support),
             "exported_ratio": _round(exported_ratio),
-            "concentration": _round(concentration),
+            "idf": idf_norm,
+            "godterm": godterm,
             "concept_candidate_score": _round(score),
         })
 
@@ -495,4 +748,4 @@ def _concept_candidates(
             c["term"],
         )
     )
-    return candidates[:50]
+    return candidates
