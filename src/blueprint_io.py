@@ -14,7 +14,7 @@ import subprocess
 import time
 from collections import defaultdict
 from pathlib import Path
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Callable, Dict, List, Optional, Set, Tuple
 
 try:
     from tqdm import tqdm as _tqdm
@@ -136,6 +136,37 @@ _LOCKFILE_NAMES: Dict[str, str] = {
 }
 
 
+ConfigParseResult = Tuple[Optional[str], Optional[str], List[str], List[str]]
+
+
+class ConfigParser:
+    """Strategy for recognizing and parsing one build config family."""
+
+    def __init__(
+        self,
+        kind: str,
+        *,
+        filenames: tuple[str, ...] = (),
+        patterns: tuple[str, ...] = (),
+        parse_func: Optional[Callable[[Path], ConfigParseResult]] = None,
+    ) -> None:
+        self.kind = kind
+        self.filenames = frozenset(filenames)
+        self.patterns = tuple(patterns)
+        self._parse_func = parse_func
+
+    def matches(self, path: Path) -> bool:
+        name = path.name
+        return name in self.filenames or any(
+            fnmatch.fnmatch(name, pat) for pat in self.patterns
+        )
+
+    def parse(self, path: Path) -> ConfigParseResult:
+        if self._parse_func is None:
+            return None, None, [], []
+        return self._parse_func(path)
+
+
 def _collect_lockfiles(root: Path) -> List[LockfileEntry]:
     """Walk *root* and return a LockfileEntry for every lockfile found."""
     results: List[LockfileEntry] = []
@@ -154,29 +185,23 @@ def _collect_lockfiles(root: Path) -> List[LockfileEntry]:
 
 def _config_kind(p: Path) -> Optional[str]:
     """Return the kind string for a config file path, or None if not recognized."""
-    name = p.name
-    if name in ("pyproject.toml", "Cargo.toml"):
-        # Cargo.toml without [package] is a workspace root — still a config
-        return "cargo" if name == "Cargo.toml" else "python-pyproject"
-    if name == "pom.xml":
-        return "maven"
-    if name in ("settings.gradle", "settings.gradle.kts"):
-        return "gradle-settings"
-    if name in ("build.gradle", "build.gradle.kts"):
-        return "gradle-build"
-    if name == "package.json":
-        return "npm"
-    if name == "go.mod":
-        return "go-mod"
-    if name in ("setup.py", "setup.cfg"):
-        return "setuptools"
-    if name == "CMakeLists.txt":
-        return "cmake"
-    if name == "Makefile":
-        return "make"
-    for pat in _CONFIG_FILE_PATTERNS:
-        if fnmatch.fnmatch(name, pat):
-            return "python-requirements"
+    parser = _parser_for_path(p)
+    return parser.kind if parser is not None else None
+
+
+def _parser_for_path(p: Path):
+    """Return the registered ConfigParser for *p*, or None."""
+    for parser in CONFIG_PARSERS:
+        if hasattr(parser, "matches"):
+            if parser.matches(p):
+                return parser
+            continue
+
+        name = p.name
+        filenames = getattr(parser, "filenames", ())
+        patterns = getattr(parser, "patterns", ())
+        if name in filenames or any(fnmatch.fnmatch(name, pat) for pat in patterns):
+            return parser
     return None
 
 
@@ -186,13 +211,9 @@ def _find_config_files(root: Path) -> List[Path]:
     for dirpath, dirnames, filenames in root.walk() if hasattr(root, "walk") else _os_walk(root):
         dirnames[:] = [d for d in dirnames if d not in _CONFIG_SKIP_DIRS and not d.startswith(".")]
         for fname in filenames:
-            if fname in _CONFIG_FILE_NAMES:
-                results.append(Path(dirpath) / fname)
-            else:
-                for pat in _CONFIG_FILE_PATTERNS:
-                    if fnmatch.fnmatch(fname, pat):
-                        results.append(Path(dirpath) / fname)
-                        break
+            candidate = Path(dirpath) / fname
+            if _parser_for_path(candidate) is not None:
+                results.append(candidate)
     return sorted(results)
 
 
@@ -353,11 +374,57 @@ def _parse_go_mod(p: Path):
     return name, raw_deps
 
 
+def _parse_pyproject_config(p: Path) -> ConfigParseResult:
+    name, version, raw_deps = _parse_pyproject(p)
+    return name, version, raw_deps, []
+
+
+def _parse_requirements_config(p: Path) -> ConfigParseResult:
+    return None, None, _parse_requirements(p), []
+
+
+def _parse_gradle_settings_config(p: Path) -> ConfigParseResult:
+    name, modules = _parse_gradle_settings(p)
+    return name, None, [], modules
+
+
+def _parse_gradle_build_config(p: Path) -> ConfigParseResult:
+    name, version, raw_deps = _parse_gradle_build(p)
+    return name, version, raw_deps, []
+
+
+def _parse_package_json_config(p: Path) -> ConfigParseResult:
+    name, version, raw_deps = _parse_package_json(p)
+    return name, version, raw_deps, []
+
+
+def _parse_go_mod_config(p: Path) -> ConfigParseResult:
+    name, raw_deps = _parse_go_mod(p)
+    return name, None, raw_deps, []
+
+
+CONFIG_PARSERS: tuple[ConfigParser, ...] = (
+    ConfigParser("python-pyproject", filenames=("pyproject.toml",), parse_func=_parse_pyproject_config),
+    ConfigParser("python-requirements", patterns=("requirements*.txt",), parse_func=_parse_requirements_config),
+    ConfigParser("maven", filenames=("pom.xml",), parse_func=_parse_pom),
+    ConfigParser("gradle-settings", filenames=("settings.gradle", "settings.gradle.kts"), parse_func=_parse_gradle_settings_config),
+    ConfigParser("gradle-build", filenames=("build.gradle", "build.gradle.kts"), parse_func=_parse_gradle_build_config),
+    ConfigParser("npm", filenames=("package.json",), parse_func=_parse_package_json_config),
+    ConfigParser("cargo", filenames=("Cargo.toml",), parse_func=_parse_cargo),
+    ConfigParser("go-mod", filenames=("go.mod",), parse_func=_parse_go_mod_config),
+    ConfigParser("setuptools", filenames=("setup.py", "setup.cfg")),
+    ConfigParser("pipenv", filenames=("Pipfile",)),
+    ConfigParser("cmake", filenames=("CMakeLists.txt",)),
+    ConfigParser("make", filenames=("Makefile",)),
+)
+
+
 def _parse_config_file(abs_path: Path, sg_root: Path) -> Optional[ConfigEntry]:
     """Parse one build config file; returns None if unrecognized or unparseable."""
-    kind = _config_kind(abs_path)
-    if kind is None:
+    parser = _parser_for_path(abs_path)
+    if parser is None:
         return None
+    kind = parser.kind
 
     try:
         rel = abs_path.relative_to(sg_root)
@@ -374,22 +441,7 @@ def _parse_config_file(abs_path: Path, sg_root: Path) -> Optional[ConfigEntry]:
     modules: List[str] = []
 
     try:
-        if kind == "python-pyproject":
-            name, version, raw_deps = _parse_pyproject(abs_path)
-        elif kind == "python-requirements":
-            raw_deps = _parse_requirements(abs_path)
-        elif kind == "maven":
-            name, version, raw_deps, modules = _parse_pom(abs_path)
-        elif kind == "gradle-settings":
-            name, modules = _parse_gradle_settings(abs_path)
-        elif kind == "gradle-build":
-            name, version, raw_deps = _parse_gradle_build(abs_path)
-        elif kind == "npm":
-            name, version, raw_deps = _parse_package_json(abs_path)
-        elif kind == "cargo":
-            name, version, raw_deps, modules = _parse_cargo(abs_path)
-        elif kind == "go-mod":
-            name, raw_deps = _parse_go_mod(abs_path)
+        name, version, raw_deps, modules = parser.parse(abs_path)
     except Exception:
         pass  # graceful: return what we have
 
@@ -992,14 +1044,17 @@ def _find_symbol_at(
 def _is_test_file(path: str) -> bool:
     """Return True if *path* looks like a test file by naming convention."""
     p = Path(path)
-    name = p.stem.lower()
+    stem = p.stem
+    name = stem.lower()
     parts = [part.lower() for part in p.parts]
     return (
         name.startswith("test_")
         or name.endswith("_test")
         or name.endswith(".test")
         or name.endswith(".spec")
-        or any(part in ("test", "tests") for part in parts[:-1])  # parent dir
+        or bool(re.search(r"^Test[A-Z_]", stem))
+        or stem.endswith("Test")
+        or any(part in _TEST_DIR_NAMES for part in parts[:-1])  # parent dir
     )
 
 

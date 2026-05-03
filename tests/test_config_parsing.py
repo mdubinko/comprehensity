@@ -55,6 +55,53 @@ class TestConfigKind:
 
 
 # ---------------------------------------------------------------------------
+# Parser registry / strategy dispatch
+# ---------------------------------------------------------------------------
+
+class TestConfigParserRegistry:
+    def test_registry_kinds_are_unique(self):
+        kinds = [parser.kind for parser in bio.CONFIG_PARSERS]
+        assert len(kinds) == len(set(kinds))
+
+    def test_parser_for_path_matches_exact_filename(self):
+        parser = bio._parser_for_path(Path("package.json"))
+        assert parser is not None
+        assert parser.kind == "npm"
+
+    def test_parser_for_path_matches_glob_pattern(self):
+        parser = bio._parser_for_path(Path("requirements-dev.txt"))
+        assert parser is not None
+        assert parser.kind == "python-requirements"
+
+    def test_parser_for_path_rejects_unknown(self):
+        assert bio._parser_for_path(Path("foo.json")) is None
+
+    def test_parse_config_file_delegates_to_strategy(self, tmp_path):
+        class DummyParser:
+            kind = "dummy"
+            filenames = frozenset({"dummy.conf"})
+            patterns = ()
+
+            def parse(self, path: Path):
+                return "dummy-name", "1.0", ["dummy-dep"], ["dummy-module"]
+
+        parser = DummyParser()
+        old = bio.CONFIG_PARSERS
+        try:
+            bio.CONFIG_PARSERS = (parser,) + tuple(old)
+            entry = bio._parse_config_file(tmp_path / "dummy.conf", tmp_path)
+        finally:
+            bio.CONFIG_PARSERS = old
+
+        assert entry is not None
+        assert entry.kind == "dummy"
+        assert entry.name == "dummy-name"
+        assert entry.version == "1.0"
+        assert entry.raw_deps == ["dummy-dep"]
+        assert entry.modules == ["dummy-module"]
+
+
+# ---------------------------------------------------------------------------
 # Per-format parsers
 # ---------------------------------------------------------------------------
 

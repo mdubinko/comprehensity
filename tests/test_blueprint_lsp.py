@@ -81,12 +81,27 @@ class TestIsTestFile:
     def test_tests_directory(self):
         assert _is_test_file("tests/utils.py")
 
+    def test_common_test_directories(self):
+        assert _is_test_file("src/__tests__/auth.ts")
+        assert _is_test_file("src/spec/payment_spec.rb")
+        assert _is_test_file("src/test/java/com/acme/Foo.java")
+
+    def test_dot_test_and_dot_spec_filenames(self):
+        assert _is_test_file("src/auth.test.ts")
+        assert _is_test_file("src/auth.spec.tsx")
+        assert _is_test_file("src/components/Button.spec.jsx")
+
+    def test_camelcase_test_filenames(self):
+        assert _is_test_file("src/main/java/com/acme/FooTest.java")
+        assert _is_test_file("src/main/java/com/acme/TestFoo.java")
+
     def test_non_test(self):
         assert not _is_test_file("src/main.py")
 
     def test_non_test_with_test_in_name(self):
         # "contest.py" — "test" appears but not as prefix/suffix marker
         assert not _is_test_file("src/contest.py")
+        assert not _is_test_file("src/latest.py")
 
 
 # ---------------------------------------------------------------------------
