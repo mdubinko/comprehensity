@@ -374,6 +374,22 @@ def _parse_go_mod(p: Path):
     return name, raw_deps
 
 
+def _parse_sbt(p: Path):
+    text = _safe_read(p)
+    name_m = re.search(r'^name\s*:=\s*"([^"]+)"', text, re.MULTILINE)
+    version_m = re.search(r'^version\s*:=\s*"([^"]+)"', text, re.MULTILINE)
+    name = name_m.group(1) if name_m else None
+    version = version_m.group(1) if version_m else None
+    # libraryDependencies: "group" %% "artifact" % "version"
+    raw_deps = re.findall(r'"[^"]+"\s+%%?\s+"([^"]+)"\s+%', text)
+    return name, version, list(dict.fromkeys(raw_deps))
+
+
+def _parse_sbt_config(p: Path) -> ConfigParseResult:
+    name, version, raw_deps = _parse_sbt(p)
+    return name, version, raw_deps, []
+
+
 def _parse_pyproject_config(p: Path) -> ConfigParseResult:
     name, version, raw_deps = _parse_pyproject(p)
     return name, version, raw_deps, []
@@ -416,6 +432,7 @@ CONFIG_PARSERS: tuple[ConfigParser, ...] = (
     ConfigParser("pipenv", filenames=("Pipfile",)),
     ConfigParser("cmake", filenames=("CMakeLists.txt",)),
     ConfigParser("make", filenames=("Makefile",)),
+    ConfigParser("sbt", filenames=("build.sbt",), parse_func=_parse_sbt_config),
 )
 
 

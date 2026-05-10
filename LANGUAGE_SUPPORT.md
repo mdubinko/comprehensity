@@ -58,6 +58,33 @@ that language is skipped with a warning. Phase 1 basic always works without any 
 
 ---
 
+## Module Hierarchy (L2/L3/L4) by Language
+
+Phase 1 detects module boundaries at three levels above the file (L1):
+
+| Level | Meaning | Detection method |
+|---|---|---|
+| **L2** | Language package | Language-specific: Python `__init__.py`, Go directory, Java `package` declaration |
+| **L3** | Build unit | Build manifest on disk (`pyproject.toml`, `Cargo.toml`, `package.json`, `CMakeLists.txt`, etc.) |
+| **L4** | Graph cluster | Louvain community detection on the import graph (phase 2); falls back to directory grouping when the graph is sparse |
+
+**L2 is only detected for Python, Go, and Java.** C, C++, Rust, TypeScript, and JavaScript produce no L2 modules because those languages lack a filesystem-mapped package concept that L2 can reliably detect:
+
+| Language | L2 | L3 | L4 | Notes |
+|---|---|---|---|---|
+| Python | ✅ `__init__.py` dirs | ✅ pyproject/setup | ✅ import graph | Full hierarchy |
+| Go | ✅ directory packages | ✅ go.mod | ✅ import graph | Full hierarchy |
+| Java | ✅ `package` declarations | ✅ maven/gradle | ✅ import graph | Full hierarchy |
+| TypeScript / JavaScript | — | ✅ package.json | ✅ import graph | L4 covers what L2 would add; dir clustering as fallback |
+| Rust | — | ✅ Cargo.toml | ⚠️ sparse fallback | Rust `mod` system could support L2 (see below); sparse `use` graph → dir fallback common |
+| C / C++ | — | ✅ CMake/Make | ⚠️ path-dependent | `#include` resolution is build-system-dependent; dir clustering used as fallback |
+
+For languages without L2, phase 2 falls back gracefully: Louvain L4 is preferred when the import graph has sufficient edges; otherwise `dir_cluster_blueprint()` provides directory-level grouping (re-labelled L4).
+
+**Rust note:** Rust's `mod` system (`mod.rs`, `lib.rs`) does map to a real module hierarchy and could support L2 detection analogous to Python's `__init__.py`. This is a known gap — see TODO.txt.
+
+---
+
 ## Per-Language Discussions
 
 These sections record the reasoning behind each language server choice.
@@ -161,6 +188,12 @@ the LSP-derived call graph will capture the cross-module relationships accuratel
 
 **Status:** Phase 1 imports and symbols fully implemented. Semantic via rust-analyzer configured but not yet connected to the installer; `rustup component add rust-analyzer` is the install step once decided.
 
+**L2 modules:** Not detected. Rust `use` declarations are namespace-based and don't map
+to file paths, so the import graph is typically sparse and L4 falls back to directory
+clustering. However, Rust's `mod` system (`mod.rs`, `lib.rs` as package roots) does map
+to filesystem structure and could support L2 detection analogous to Python's `__init__.py`.
+This is a known gap tracked in TODO.txt.
+
 ---
 
 ### Java
@@ -213,6 +246,9 @@ installer/bundling strategy for shipping JDK 21+ with comprehensity is under dis
 
 No LSP server planned. `#include` resolution is path-dependent and requires a
 compilation database (`compile_commands.json`). Out of scope for Phase 1.
+
+**L2 modules:** Not detected. C++ namespaces do not map to filesystem structure, so
+there is no reliable L2 signal. Phase 2 directory clustering fills the gap.
 
 ---
 

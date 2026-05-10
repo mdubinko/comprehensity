@@ -138,6 +138,7 @@ _BUILD_CONFIGS: Dict[str, str] = {
     "setup.cfg":           "setuptools",
     "CMakeLists.txt":      "cmake",
     "Makefile":            "make",
+    "build.sbt":           "sbt",
 }
 
 # Maps build-config kind → languages that config implies are primary.
@@ -151,6 +152,7 @@ _BUILD_KIND_TO_LANGS: Dict[str, List[str]] = {
     "pyproject":  ["python"],
     "setuptools": ["python"],
     "cmake":      ["c", "cpp"],
+    "sbt":        ["scala"],
 }
 
 # Minimum file count for a language to be considered primary when no build config implies it.

@@ -6,6 +6,9 @@ package structure (L2), then assigns FileEntry IDs to each module.
 
 L1 (file-level) is always implied by FileEntry — not stored here.
 L2 (language package): Python __init__.py dirs, Go dir packages, Java package decls.
+    C, C++, Rust, TypeScript, and JavaScript produce no L2 modules — those languages
+    lack a filesystem-mapped package concept that L2 can reliably detect. Phase 2
+    Louvain clustering (L4) or directory grouping fills the gap for those languages.
 L3 (build unit): directories containing build manifests located by scanning disk.
 
 No network calls; stdlib + pathlib only.
@@ -202,6 +205,10 @@ def _detect_l2(
     Go:     all .go files in the same directory share a package; name from
             first `package` declaration found.
     Java:   .java files grouped by their `package` declaration.
+
+    Languages not handled here (C, C++, Rust, TypeScript, JavaScript) produce no
+    L2 modules. For those languages, phase 2 directory clustering or Louvain (L4)
+    provides the equivalent grouping. See LANGUAGE_SUPPORT.md for details.
     """
     modules: List[ModuleEntry] = []
     modules.extend(_detect_python_packages(root, file_entries))
